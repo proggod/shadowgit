@@ -1,0 +1,231 @@
+{
+  "name": "shadow-git",
+  "displayName": "Shadow Git",
+  "description": "Virtual git layer for managing diffs without affecting the real repository",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "shadowGit.takeSnapshot",
+        "title": "Shadow Git: Take Snapshot (Both Systems)"
+      },
+      {
+        "command": "shadowGit.takeMainSnapshot",
+        "title": "Shadow Git: Take Snapshot (Main System)"
+      },
+      {
+        "command": "shadowGit.takeWorkingSnapshot",
+        "title": "Shadow Git: Take Snapshot (Working System)"
+      },
+      {
+        "command": "shadowGit.openDiff",
+        "title": "Shadow Git: Open Shadow Diff"
+      },
+      {
+        "command": "shadowGit.approveChange",
+        "title": "Shadow Git: Approve Change"
+      },
+      {
+        "command": "shadowGit.disapproveChange",
+        "title": "Shadow Git: Disapprove Change"
+      },
+      {
+        "command": "shadowGit.createCheckpoint",
+        "title": "Shadow Git: Create Checkpoint"
+      },
+      {
+        "command": "shadowGit.createWorkingCheckpoint",
+        "title": "Shadow Git: Create Working Checkpoint"
+      },
+      {
+        "command": "shadowGit.approveAllChanges",
+        "title": "Shadow Git: Approve All Changes"
+      },
+      {
+        "command": "shadowGit.disapproveAllChanges",
+        "title": "Shadow Git: Disapprove All Changes"
+      },
+      {
+        "command": "shadowGit.compareWithCheckpoint",
+        "title": "Shadow Git: Compare with Checkpoint"
+      },
+      {
+        "command": "shadowGit.compareWithHead",
+        "title": "Shadow Git: Compare with HEAD"
+      },
+      {
+        "command": "shadowGit.compareWithShadowGit",
+        "title": "Shadow Git: Compare with Specific Shadow Git"
+      },
+      {
+        "command": "shadowGit.showChangeContextMenu",
+        "title": "Shadow Git: Show Change Context Menu"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "shadow-git",
+          "title": "Shadow Git",
+          "icon": "resources/shadow-git-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "shadow-git": [
+        {
+          "id": "shadowGitMain",
+          "name": "Main Shadow Git",
+          "type": "webview"
+        },
+        {
+          "id": "shadowGitWorking",
+          "name": "Working Shadow Git",
+          "type": "webview"
+        }
+      ],
+      "scm": [
+        {
+          "id": "shadowGitSCM",
+          "name": "Shadow Git"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "shadowGit.takeSnapshot",
+          "group": "navigation"
+        },
+        {
+          "command": "shadowGit.openDiff",
+          "group": "navigation"
+        },
+        {
+          "command": "shadowGit.compareWithShadowGit",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "shadowGit.createCheckpoint",
+          "when": "view == shadowGitMain",
+          "group": "navigation"
+        },
+        {
+          "command": "shadowGit.createWorkingCheckpoint",
+          "when": "view == shadowGitWorking",
+          "group": "navigation"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "shadowGit.openDiff",
+          "when": "scmProvider =~ /shadowgit.*/",
+          "group": "inline"
+        },
+        {
+          "command": "shadowGit.approveAllChanges",
+          "when": "scmProvider =~ /shadowgit.*/",
+          "group": "1_modification"
+        },
+        {
+          "command": "shadowGit.disapproveAllChanges",
+          "when": "scmProvider =~ /shadowgit.*/",
+          "group": "1_modification"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "shadowGit.approveChange",
+          "when": "editorHasSelection",
+          "group": "1_modification"
+        },
+        {
+          "command": "shadowGit.disapproveChange",
+          "when": "editorHasSelection",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Shadow Git",
+      "properties": {
+        "shadowGit.autoSnapshot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically take snapshots of files when they are opened"
+        },
+        "shadowGit.customIconsInDiff": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use custom icons in diff view"
+        },
+        "shadowGit.showCheckpointsInTimeline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show checkpoints in VS Code timeline view"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "shadowGit.takeSnapshot",
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
+      },
+      {
+        "command": "shadowGit.openDiff",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d"
+      },
+      {
+        "command": "shadowGit.createCheckpoint",
+        "key": "ctrl+alt+c",
+        "mac": "cmd+alt+c"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm-run-all -s check-types esbuild",
+    "esbuild": "node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch",
+    "package": "npm-run-all -s check-types \"esbuild -- --production\"",
+    "lint": "eslint src --ext ts",
+    "test": "node ./test/runTest.js",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/glob": "^7.1.3",
+    "@types/mocha": "^8.2.2",
+    "@types/node": "^14.15.0",
+    "@types/vscode": "^1.60.0",
+    "@typescript-eslint/eslint-plugin": "^4.26.0",
+    "@typescript-eslint/parser": "^4.26.0",
+    "@vscode/codicons": "^0.0.29",
+    "esbuild": "^0.25.4",
+    "eslint": "^7.27.0",
+    "glob": "^7.1.7",
+    "mocha": "^8.4.0",
+    "npm-run-all": "^4.1.5",
+    "ts-loader": "^9.2.2",
+    "typescript": "^4.3.2",
+    "vscode-test": "^1.5.2",
+    "webpack": "^5.38.1",
+    "webpack-cli": "^4.7.0"
+  }
+}

@@ -1,0 +1,153 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { ShadowGit } from './shadowGit';
+
+/**
+ * SCM Provider for Shadow Git
+ */
+export class ShadowGitSCMProvider {
+  private readonly context: vscode.ExtensionContext;
+  private readonly shadowGit: ShadowGit;
+  private scm: vscode.SourceControl;
+  private changeGroup: vscode.SourceControlResourceGroup;
+  
+  /**
+   * Creates a new ShadowGitSCMProvider
+   * @param context - Extension context
+   * @param shadowGit - ShadowGit instance
+   */
+  constructor(context: vscode.ExtensionContext, shadowGit: ShadowGit) {
+    this.context = context;
+    this.shadowGit = shadowGit;
+    
+    // Create SCM provider
+    const scmId = `shadowgit-${shadowGit.type}`;
+    const scmLabel = `Shadow Git (${shadowGit.type === 'main' ? 'Main' : 'Working'})`;
+    this.scm = vscode.scm.createSourceControl(scmId, scmLabel);
+    
+    // Create resource group for changes
+    this.changeGroup = this.scm.createResourceGroup('changes', 'Changes');
+    
+    // Set SCM input box placeholder
+    this.scm.inputBox.placeholder = `Message for new ${shadowGit.type} checkpoint...`;
+    
+    // Set up the command to create checkpoint from SCM
+    context.subscriptions.push(
+      vscode.commands.registerCommand(`shadowGit.createCheckpointFrom${shadowGit.type === 'main' ? 'Main' : 'Working'}SCM`, 
+        () => this.createCheckpointFromSCM()
+      )
+    );
+    
+    // Initial update
+    this.update();
+    
+    // Register event listeners
+    this.registerEventListeners();
+  }
+  
+  /**
+   * Register event listeners
+   */
+  private registerEventListeners(): void {
+    // Listen for file changes
+    vscode.workspace.onDidChangeTextDocument(event => {
+      const filePath = event.document.uri.fsPath;
+      const relativePath = path.relative(this.shadowGit.workspaceRoot, filePath);
+      
+      // Skip files in .vscode/.shadowgit-*
+      if (filePath.includes('.vscode/.shadowgit-')) {
+        return;
+      }
+      
+      // Check if this is a tracked file
+      if (this.shadowGit.snapshots.has(relativePath)) {
+        // Detect changes
+        this.shadowGit.detectChanges(filePath);
+        
+        // Update SCM
+        this.update();
+      }
+    });
+  }
+  
+  /**
+   * Update SCM resources
+   */
+  public update(): void {
+    const resources: vscode.SourceControlResourceState[] = [];
+    
+    // Create resources for tracked files with changes
+    for (const [relativePath, changes] of this.shadowGit.changes.entries()) {
+      if (changes.length > 0) {
+        const fileUri = vscode.Uri.file(path.join(this.shadowGit.workspaceRoot, relativePath));
+        
+        // Count approved and pending changes
+        const approvedCount = changes.filter(c => c.approved).length;
+        const pendingCount = changes.length - approvedCount;
+        
+        const decorations: vscode.SourceControlResourceDecorations = {
+          strikeThrough: false,
+          tooltip: `${approvedCount} approved, ${pendingCount} pending changes`,
+          faded: false
+        };
+        
+        resources.push({
+          resourceUri: fileUri,
+          decorations,
+          command: {
+            title: 'Open Diff',
+            command: 'vscode.diff',
+            arguments: [
+              this.createTempDiffUri(relativePath),
+              fileUri,
+              `Shadow Diff: ${path.basename(relativePath)} (${this.shadowGit.type})`
+            ]
+          }
+        });
+      }
+    }
+    
+    this.changeGroup.resourceStates = resources;
+  }
+  
+  /**
+   * Create a URI for the temporary diff file
+   * @param relativePath - Relative path to the file
+   * @returns URI for the temp file
+   */
+  private createTempDiffUri(relativePath: string): vscode.Uri {
+    const tempPath = this.shadowGit.createTempSnapshotFile(relativePath);
+    return vscode.Uri.file(tempPath);
+  }
+  
+  /**
+   * Create a checkpoint from SCM input
+   */
+  private async createCheckpointFromSCM(): Promise<void> {
+    const message = this.scm.inputBox.value;
+    if (!message) {
+      vscode.window.showErrorMessage('Please enter a checkpoint message');
+      return;
+    }
+    
+    try {
+      const checkpoint = this.shadowGit.createCheckpoint(message);
+      vscode.window.showInformationMessage(`${this.shadowGit.type} checkpoint created: ${checkpoint.id.substring(0, 8)}`);
+      
+      // Clear input box
+      this.scm.inputBox.value = '';
+      
+      // Update SCM
+      this.update();
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to create checkpoint: ${(error as Error).message}`);
+    }
+  }
+  
+  /**
+   * Dispose of the SCM provider
+   */
+  public dispose(): void {
+    this.scm.dispose();
+  }
+}

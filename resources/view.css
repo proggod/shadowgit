@@ -1,0 +1,116 @@
+:root {
+  --container-padding: 10px;
+  --input-padding-vertical: 6px;
+  --input-padding-horizontal: 10px;
+}
+
+body {
+  padding: 0;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+}
+
+.container {
+  padding: var(--container-padding);
+}
+
+button {
+  border: none;
+  padding: var(--input-padding-vertical) var(--input-padding-horizontal);
+  width: 100%;
+  text-align: center;
+  outline: none;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  cursor: pointer;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+button i {
+  margin-right: 5px;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+h2, h3 {
+  font-weight: 400;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.files-list, .checkpoints-list {
+  margin-top: 8px;
+}
+
+.file-item {
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+}
+
+.file-name {
+  font-weight: bold;
+}
+
+.file-path {
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 8px;
+}
+
+.file-actions {
+  display: flex;
+  justify-content: space-between;
+}
+
+.file-actions button {
+  width: 48%;
+}
+
+.checkpoint-item {
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+}
+
+.checkpoint-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.checkpoint-id {
+  font-weight: bold;
+}
+
+.checkpoint-date {
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+}
+
+.checkpoint-message {
+  margin-bottom: 8px;
+}
+
+.empty-message {
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+  text-align: center;
+  padding: 10px;
+}

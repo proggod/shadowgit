@@ -1,0 +1,446 @@
+{
+  "name": "codersinflow",
+  "displayName": "Coders in Flow",
+  "description": "Coders in Flow AI Code Editor",
+  "version": "0.0.297",
+  "publisher": "darkflows",
+  "icon": "resources/codersinflow_icon.png",
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/your-repo.git"
+  },
+  "enabledApiProposals": [],
+  "activationEvents": [
+    "*"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codersinflow.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "codersinflow.openChat",
+        "title": "Open Chat Panel"
+      },
+      {
+        "command": "codersinflow.openCursorSettings",
+        "title": "Open Cursor Settings"
+      },
+      {
+        "command": "codersinflow.openSettings",
+        "title": "Open Settings",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "codersinflow.sendMessage",
+        "title": "Send Chat Message"
+      },
+      {
+        "command": "codersinflow.openAIEditor",
+        "title": "Open AI Editor",
+        "icon": "$(server)"
+      },
+      {
+        "command": "codersinflow.newTask",
+        "title": "New Conversation",
+        "icon": "$(add)"
+      },
+      {
+        "command": "codersinflow.testDataService",
+        "title": "Test Data Service"
+      },
+      {
+        "command": "codersinflow.forceInitData",
+        "title": "Force Initialize Data Files"
+      },
+      {
+        "command": "codersinflow.debug",
+        "title": "Debug Coders in Flow Extension"
+      },
+      {
+        "command": "codersinflow.clearChatHistory",
+        "title": "Coders in Flow: Clear Chat History"
+      },
+      {
+        "command": "codersinflow.showTerminal",
+        "title": "Show CodersInFlow Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "codersinflow.killTerminalCommand",
+        "title": "Kill Current Terminal Command",
+        "icon": "$(stop)"
+      },
+      {
+        "command": "codersinflow.semanticSearch",
+        "title": "Semantic Search: Search Codebase",
+        "icon": "$(search)"
+      },
+      {
+        "command": "codersinflow.indexWorkspace",
+        "title": "Semantic Search: Index Workspace",
+        "icon": "$(database)"
+      },
+      {
+        "command": "codersinflow.indexFile",
+        "title": "Semantic Search: Index Current File",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "codersinflow.indexChangedFiles",
+        "title": "Semantic Search: Index Changed Files",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "codersinflow.checkWorkspaceIndexing",
+        "title": "Semantic Search: Check Workspace Indexing",
+        "icon": "$(check)"
+      },
+      {
+        "command": "codersinflow.checkQdrant",
+        "title": "Semantic Search: Check Qdrant Installation",
+        "icon": "$(database)"
+      },
+      {
+        "command": "codersinflow.openContextViewer",
+        "title": "Open Context Viewer",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "codersinflow.forceQdrantInstalled",
+        "title": "Semantic Search: Force Qdrant Installed Status",
+        "icon": "$(database)"
+      },
+      {
+        "command": "codersinflow.generateProjectSummary",
+        "title": "Semantic Search: Generate Project Summary",
+        "icon": "$(book)"
+      },
+      {
+        "command": "codersinflow.dumpQdrantInfo",
+        "title": "Semantic Search: Dump Qdrant Database Info",
+        "icon": "$(database)"
+      },
+      {
+        "command": "codersinflow.testOllamaConnection",
+        "title": "Test Ollama Connection"
+      },
+      {
+        "command": "codersinflow.testCopilotConnection",
+        "title": "Test GitHub Copilot Connection"
+      },
+      {
+        "command": "codersinflow.validateOpenAIKey",
+        "title": "Semantic Search: Test OpenAI API Key",
+        "icon": "$(key)"
+      },
+      {
+        "command": "codersinflow.testMermaidDiagram",
+        "title": "Mermaid: Create Test Diagram",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "codersinflow.testElectronDiagram",
+        "title": "Mermaid: Show Electron App Diagram",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "codersinflow.renderMermaidDiagram",
+        "title": "Mermaid: Render Current Diagram",
+        "icon": "$(play)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codersinflow-sidebar",
+          "title": "Coders in Flow",
+          "icon": "resources/codersinflow_icon.png"
+        }
+      ]
+    },
+    "views": {
+      "codersinflow-sidebar": [
+        {
+          "type": "webview",
+          "id": "codersinflow.chatView",
+          "name": "Coders in Flow",
+          "icon": "resources/codersinflow_icon.png"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "codersinflow.openSettings",
+          "when": "view == codersinflow.chatView",
+          "group": "navigation"
+        },
+        {
+          "command": "codersinflow.newTask",
+          "when": "view == codersinflow.chatView",
+          "group": "navigation"
+        },
+        {
+          "command": "codersinflow.showTerminal",
+          "when": "view == codersinflow.chatView",
+          "group": "terminal"
+        },
+        {
+          "command": "codersinflow.killTerminalCommand",
+          "when": "view == codersinflow.chatView",
+          "group": "terminal"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "codersinflow.checkWorkspaceIndexing",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.checkQdrant",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.semanticSearch",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.indexWorkspace",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.indexChangedFiles",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.indexFile",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.forceQdrantInstalled",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.generateProjectSummary",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.dumpQdrantInfo",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.validateOpenAIKey",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.testMermaidDiagram",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.testElectronDiagram",
+          "group": "codersinflow"
+        },
+        {
+          "command": "codersinflow.renderMermaidDiagram",
+          "group": "codersinflow"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codersinflow.debug",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d"
+      }
+    ],
+    "configuration": {
+      "title": "Coders in Flow",
+      "properties": {
+        "codersinflow.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API Key for the service"
+        },
+        "codersinflow.chat.theme": {
+          "type": "string",
+          "enum": [
+            "dark",
+            "light",
+            "system"
+          ],
+          "default": "system",
+          "description": "Theme for the chat interface"
+        },
+        "codersinflow.chat.fontSize": {
+          "type": "number",
+          "default": 14,
+          "description": "Font size for the chat interface"
+        },
+        "codersinflow.cursor.enableSuggestions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable cursor suggestions"
+        },
+        "codersinflow.cursor.autoImport": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable auto-import for cursor suggestions"
+        },
+        "codersinflow.ai.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic"
+          ],
+          "default": "openai",
+          "description": "AI provider to use for chat"
+        },
+        "codersinflow.ai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for the AI provider"
+        },
+        "codersinflow.ai.apiEndpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Custom API endpoint for the AI provider (leave empty for default)"
+        },
+        "codersinflow.ai.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model to use for the AI provider (leave empty for default)"
+        },
+        "codersinflow.semanticSearch.excludePatterns": {
+          "type": "array",
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/.git/**",
+            "**/build/**",
+            "**/*.min.js",
+            "**/*.min.css",
+            "**/out/**",
+            "**/coverage/**",
+            "**/tmp/**",
+            "**/temp/**",
+            "**/vendor/**",
+            "**/bin/**",
+            "**/obj/**"
+          ],
+          "description": "Glob patterns to exclude from semantic search indexing"
+        },
+        "codersinflow.terminal.useGitBashOnWindows": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use Git Bash as the default shell on Windows when available"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out && node scripts/copy-test-files.js",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "npm run check-circular && NODE_OPTIONS=--experimental-vm-modules jest",
+    "test:watch": "jest --watch",
+    "jest": "jest",
+    "check-circular": "npx madge --circular --extensions js,ts ./src",
+    "update-build-number": "node scripts/update-build-number.js",
+    "clean-vsix": "rm -f *.vsix",
+    "build": "npm run clean-vsix && npm run update-build-number && npm run check-types && npm run lint && npm run check-circular && node esbuild.js --production && node scripts/copy-dependencies.js && node scripts/run-custom-package.js && npm run verify-vsix",
+    "verify-vsix": "node scripts/verify-vsix.js",
+    "restore-version": "git checkout -- package.json"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.1",
+    "@types/jest": "^29.5.14",
+    "@types/micromatch": "^4.0.9",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.17.30",
+    "@types/prismjs": "^1.26.3",
+    "@types/react": "^18.2.67",
+    "@types/react-dom": "^18.2.22",
+    "@types/string-similarity": "^4.0.2",
+    "@types/vscode": "^1.96.0",
+    "@typescript-eslint/eslint-plugin": "^8.28.0",
+    "@typescript-eslint/parser": "^8.28.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "autoprefixer": "^10.4.21",
+    "chai": "^5.2.0",
+    "esbuild": "^0.25.1",
+    "esbuild-plugin-tailwindcss": "^2.0.1",
+    "eslint": "^9.23.0",
+    "isbinaryfile": "^5.0.4",
+    "jest": "^29.7.0",
+    "madge": "^6.1.0",
+    "mammoth": "^1.9.0",
+    "mocha": "^11.1.0",
+    "npm-run-all": "^4.1.5",
+    "pdf-parse": "^1.1.1",
+    "postcss": "^8.5.3",
+    "sharp": "^0.34.1",
+    "tailwindcss": "3",
+    "ts-jest": "^29.3.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.19.2",
+    "@anthropic-ai/vertex-sdk": "^0.7.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.787.0",
+    "@aws-sdk/credential-providers": "^3.787.0",
+    "@google-cloud/vertexai": "^1.9.3",
+    "@google/genai": "^0.9.0",
+    "@mistralai/mistralai": "^1.6.0",
+    "@qdrant/js-client-rest": "^1.14.0",
+    "@types/cheerio": "^0.22.35",
+    "@types/diff": "^7.0.2",
+    "@types/minimatch": "^5.1.2",
+    "@types/puppeteer": "^5.4.7",
+    "@types/uuid": "^10.0.0",
+    "cheerio": "^1.0.0",
+    "diff": "^7.0.0",
+    "dotenv": "^16.5.0",
+    "fast-xml-parser": "^5.2.0",
+    "globby": "^14.1.0",
+    "google-auth-library": "^9.15.1",
+    "ignore": "^5.3.1",
+    "lucide-react": "^0.487.0",
+    "minimatch": "^10.0.1",
+    "openai": "^4.95.1",
+    "p-wait-for": "^5.0.2",
+    "prismjs": "^1.30.0",
+    "puppeteer": "^24.7.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "simple-git": "^3.27.0",
+    "string-similarity": "^4.0.4",
+    "tar": "^7.4.3",
+    "tiktoken": "^1.0.20",
+    "uuid": "^11.1.0",
+    "web-tree-sitter": "^0.25.3",
+    "zod": "^3.24.2"
+  },
+  "buildNumber": 297
+}
