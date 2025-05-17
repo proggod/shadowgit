@@ -18,6 +18,9 @@ Shadow Git is a virtual layer that mimics git functionality but operates indepen
 
 ## Basic Usage
 
+
+
+
 ### Commands
 
 - `Shadow Git: Take Main Snapshot` - Create a snapshot in the main shadow git system
@@ -52,8 +55,8 @@ The Shadow Git system integrates with VS Code's Source Control Management:
 ### Custom UI Components
 
 - **Diff Decorations** - Green (approved/additions), Red (disapproved/deletions), Blue (modifications) highlights
-- **Gutter Icons** - Approve and disapprove buttons directly in the editor
-- **Hover Actions** - Additional options when hovering over changes
+- **Gutter Icons** - Stage (approve) and disapprove buttons in the gutter alongside the standard revert button
+- **Hover Actions** - Approve/disapprove options when hovering over changes or gutter icons
 - **Shadow Git Panel** - Interactive webview with tabbed interface for managing both shadow git systems
 
 ### Using Dual Shadow Git Systems
@@ -111,8 +114,11 @@ Configure Shadow Git through VS Code settings:
 1. Take snapshots frequently to ensure accurate change tracking
 2. Use descriptive checkpoint messages
 3. Review all changes carefully in the diff view
-4. Use the approve/disapprove gutter icons to manage changes
-5. You can also approve/disapprove changes by hovering over them and using the buttons
+4. In the diff view:
+   - Use the stage (approve) button to mark a change as approved 
+   - Use the disapprove button to mark a change as disapproved
+   - Use the built-in revert button to undo a change in the file
+5. You can also approve/disapprove changes by hovering over them and using the hover buttons
 6. Use the main system for regular development checkpoints
 7. Use the working system when you want to selectively manage changes
 8. Create checkpoints before major changes to easily revert if needed

@@ -521,7 +521,7 @@ var DiffDecorationProvider = class {
         gutterIconPath: this.getIconPath("pending.svg"),
         gutterIconSize: "60%",
         after: {
-          contentText: "? Pending [Approve] [Disapprove]",
+          contentText: "? Pending",
           color: "blue",
           margin: "0 0 0 20px"
         }
@@ -533,7 +533,7 @@ var DiffDecorationProvider = class {
         gutterIconPath: this.getIconPath("pending.svg"),
         gutterIconSize: "60%",
         after: {
-          contentText: "? Pending [Approve] [Disapprove]",
+          contentText: "? Pending",
           color: "blue",
           margin: "0 0 0 20px"
         }
@@ -545,22 +545,46 @@ var DiffDecorationProvider = class {
         gutterIconPath: this.getIconPath("pending.svg"),
         gutterIconSize: "60%",
         after: {
-          contentText: "? Pending [Approve] [Disapprove]",
+          contentText: "? Pending",
           color: "blue",
           margin: "0 0 0 20px"
         }
       }),
-      // Approve gutter decoration
-      approveGutter: vscode.window.createTextEditorDecorationType({
-        rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen,
-        gutterIconPath: this.getIconPath("approve-icon.svg"),
-        gutterIconSize: "60%"
+      // Stage (approve) gutter decoration
+      stageGutter: vscode.window.createTextEditorDecorationType({
+        backgroundColor: "rgba(0, 128, 0, 0.1)",
+        borderColor: "rgba(0, 128, 0, 0.5)",
+        borderWidth: "1px",
+        borderStyle: "solid",
+        isWholeLine: true,
+        before: {
+          contentIconPath: this.getIconPath("stage-button.svg"),
+          width: "16px",
+          height: "16px"
+        },
+        after: {
+          contentText: "[Stage]",
+          color: "green",
+          margin: "0 0 0 8px"
+        }
       }),
       // Disapprove gutter decoration
       disapproveGutter: vscode.window.createTextEditorDecorationType({
-        rangeBehavior: vscode.DecorationRangeBehavior.ClosedOpen,
-        gutterIconPath: this.getIconPath("disapprove-icon.svg"),
-        gutterIconSize: "60%"
+        backgroundColor: "rgba(255, 0, 0, 0.1)",
+        borderColor: "rgba(255, 0, 0, 0.5)",
+        borderWidth: "1px",
+        borderStyle: "solid",
+        isWholeLine: true,
+        before: {
+          contentIconPath: this.getIconPath("disapprove-icon.svg"),
+          width: "16px",
+          height: "16px"
+        },
+        after: {
+          contentText: "[Disapprove]",
+          color: "red",
+          margin: "0 0 0 8px"
+        }
       }),
       // Decoration for the entire change block
       changeBlock: vscode.window.createTextEditorDecorationType({
@@ -594,12 +618,7 @@ var DiffDecorationProvider = class {
     return {
       gutterIconPath: this.getIconPath(iconPath),
       gutterIconSize: "60%",
-      overviewRulerLane: vscode.OverviewRulerLane.Right,
-      gutterCommand: {
-        command,
-        arguments: args,
-        title: command === "shadowGit.approveChange" ? "Approve Change" : "Disapprove Change"
-      }
+      overviewRulerLane: vscode.OverviewRulerLane.Right
     };
   }
   /**
@@ -698,10 +717,26 @@ var DiffDecorationProvider = class {
    * @param changes - Array of changes
    */
   registerDiffEditor(uri, changes) {
+    console.log(`Registering diff editor for ${uri.toString()}`);
+    console.log(`Found ${changes.length} changes to decorate`);
     this.diffEditors.set(uri.toString(), changes);
     const editor = vscode.window.activeTextEditor;
+    console.log(`Active editor is ${editor ? editor.document.fileName : "none"}`);
     if (editor && editor.document.uri.toString() === uri.toString()) {
+      console.log("Applying decorations immediately");
       this.applyDecorations(editor);
+    } else {
+      setTimeout(() => {
+        console.log("Attempting to find and decorate editor after delay");
+        const visibleEditors = vscode.window.visibleTextEditors;
+        for (const visibleEditor of visibleEditors) {
+          if (visibleEditor.document.uri.toString() === uri.toString()) {
+            console.log("Found editor after delay, applying decorations");
+            this.applyDecorations(visibleEditor);
+            break;
+          }
+        }
+      }, 1e3);
     }
   }
   /**
@@ -711,6 +746,10 @@ var DiffDecorationProvider = class {
   applyDecorations(editor) {
     const uri = editor.document.uri.toString();
     const changes = this.diffEditors.get(uri);
+    console.log(`Applying decorations to ${uri}`);
+    console.log(`Found ${changes ? changes.length : 0} changes`);
+    console.log(`Editor is ${editor.document.fileName}`);
+    console.log(`Context path is ${this.context.extensionPath}`);
     if (!changes) {
       return;
     }
@@ -723,7 +762,7 @@ var DiffDecorationProvider = class {
     const pendingAdditions = [];
     const pendingModifications = [];
     const pendingDeletions = [];
-    const approveGutter = [];
+    const stageGutter = [];
     const disapproveGutter = [];
     const blockDecorations = [];
     changes.forEach((change) => {
@@ -733,9 +772,14 @@ var DiffDecorationProvider = class {
         new vscode.Position(startLine, 0),
         new vscode.Position(endLine, editor.document.lineAt(endLine).text.length)
       );
-      const gutterRange = new vscode.Range(
+      const stageGutterRange = new vscode.Range(
         new vscode.Position(startLine, 0),
-        new vscode.Position(startLine, 0)
+        new vscode.Position(startLine, editor.document.lineAt(startLine).text.length)
+      );
+      const disapproveLineNum = startLine === endLine ? startLine : endLine;
+      const disapproveGutterRange = new vscode.Range(
+        new vscode.Position(disapproveLineNum, 0),
+        new vscode.Position(disapproveLineNum, editor.document.lineAt(disapproveLineNum).text.length)
       );
       const hoverMessage = new vscode.MarkdownString();
       hoverMessage.appendMarkdown(`**Change ID:** ${change.id}
@@ -762,23 +806,26 @@ var DiffDecorationProvider = class {
         range,
         hoverMessage
       };
-      const approveGutterDecoration = {
-        range: gutterRange,
-        hoverMessage: new vscode.MarkdownString(
-          `[Approve Change](command:shadowGit.approveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`
-        )
+      const stageHoverMessage = new vscode.MarkdownString(
+        `**Stage (Approve)**: Mark this change as approved
+
+[Approve Change](command:shadowGit.approveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`
+      );
+      stageHoverMessage.isTrusted = true;
+      const stageGutterDecoration = {
+        range: stageGutterRange,
+        hoverMessage: stageHoverMessage
       };
-      approveGutterDecoration.hoverMessage.isTrusted = true;
+      const disapproveHoverMessage = new vscode.MarkdownString(
+        `**Disapprove**: Mark this change as disapproved
+
+[Disapprove Change](command:shadowGit.disapproveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`
+      );
+      disapproveHoverMessage.isTrusted = true;
       const disapproveGutterDecoration = {
-        range: new vscode.Range(
-          new vscode.Position(startLine + 1, 0),
-          new vscode.Position(startLine + 1, 0)
-        ),
-        hoverMessage: new vscode.MarkdownString(
-          `[Disapprove Change](command:shadowGit.disapproveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`
-        )
+        range: disapproveGutterRange,
+        hoverMessage: disapproveHoverMessage
       };
-      disapproveGutterDecoration.hoverMessage.isTrusted = true;
       if (change.approved === true) {
         if (change.type === "addition") {
           approvedAdditions.push(decorationOptions);
@@ -803,9 +850,11 @@ var DiffDecorationProvider = class {
         } else if (change.type === "deletion") {
           pendingDeletions.push(decorationOptions);
         }
-        approveGutter.push(approveGutterDecoration);
-        disapproveGutter.push(disapproveGutterDecoration);
       }
+      stageGutter.push(stageGutterDecoration);
+      disapproveGutter.push(disapproveGutterDecoration);
+      console.log(`Added stage decorator at line ${startLine}`);
+      console.log(`Added disapprove decorator at line ${startLine + 1}`);
       blockDecorations.push(blockDecoration);
     });
     editor.setDecorations(this.decorationTypes.approvedAddition, approvedAdditions);
@@ -817,9 +866,12 @@ var DiffDecorationProvider = class {
     editor.setDecorations(this.decorationTypes.pendingAddition, pendingAdditions);
     editor.setDecorations(this.decorationTypes.pendingModification, pendingModifications);
     editor.setDecorations(this.decorationTypes.pendingDeletion, pendingDeletions);
-    editor.setDecorations(this.decorationTypes.approveGutter, approveGutter);
+    console.log(`Applying ${stageGutter.length} stage gutter decorations`);
+    console.log(`Applying ${disapproveGutter.length} disapprove gutter decorations`);
+    editor.setDecorations(this.decorationTypes.stageGutter, stageGutter);
     editor.setDecorations(this.decorationTypes.disapproveGutter, disapproveGutter);
     editor.setDecorations(this.decorationTypes.changeBlock, blockDecorations);
+    console.log("Decorations applied");
   }
   /**
    * Refresh decorations for a specific document
