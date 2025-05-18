@@ -40,6 +40,29 @@ A Visual Studio Code extension that provides a virtual git layer for tracking ch
   - Browse tracked files and checkpoints
   - Interactive controls for common operations
 
+## Configuration
+
+### Diff Editor Settings
+
+Shadow Git automatically configures VS Code's diff editor for an optimal experience:
+
+- **Single-pane View**: Git diffs use simple editor mode for inline viewing
+- **Inline Diffs**: Non-Git diffs are shown in inline mode for easier reading
+- **Editable Files**: Diffs are configured to be editable (not read-only)
+- **Visible Controls**: All inline actions and regions remain visible
+
+These settings are applied at the **workspace level** when the extension activates, so they won't affect your global VS Code settings:
+```json
+{
+  "diffEditor.renderSideBySide": false,
+  "git.diff.editor": "simple",
+  "diffEditor.readOnly": false,
+  "diffEditor.hideUnchangedRegions.enabled": false
+}
+```
+
+The extension writes these settings directly to your workspace's `.vscode/settings.json` file to ensure they take effect even if some settings are not officially registered in the current VS Code version.
+
 ## Usage
 
 ### Taking Snapshots

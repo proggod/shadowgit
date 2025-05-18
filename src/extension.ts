@@ -48,6 +48,54 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   console.log('SHADOW_GIT_DEBUG: Extension activation starting');
   
   try {
+    // Configure diff editor settings for single-pane editable view (workspace only)
+    try {
+      // First try to set the recognized VS Code setting
+      await vscode.workspace.getConfiguration().update('diffEditor.renderSideBySide', false, vscode.ConfigurationTarget.Workspace);
+      outputChannel.appendLine('Set diffEditor.renderSideBySide to false (inline mode)');
+      
+      // Now manually write additional settings that might not be registered but could work
+      if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+        const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
+        const settingsPath = path.join(workspaceRoot, '.vscode', 'settings.json');
+        
+        // Ensure .vscode directory exists
+        const vscodeDir = path.join(workspaceRoot, '.vscode');
+        if (!fs.existsSync(vscodeDir)) {
+          fs.mkdirSync(vscodeDir, { recursive: true });
+        }
+        
+        // Read existing settings
+        let settings = {};
+        try {
+          if (fs.existsSync(settingsPath)) {
+            const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+            settings = JSON.parse(settingsContent);
+          }
+        } catch (error) {
+          outputChannel.appendLine(`Could not read existing settings: ${error}`);
+        }
+        
+        // Merge with desired settings
+        const desiredSettings = {
+          "diffEditor.renderSideBySide": false,
+          "git.diff.editor": "simple",
+          "diffEditor.readOnly": false,
+          "diffEditor.hideUnchangedRegions.enabled": false
+        };
+        
+        settings = { ...settings, ...desiredSettings };
+        
+        // Write updated settings
+        fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+        outputChannel.appendLine('Wrote additional diff editor settings to workspace settings.json');
+      }
+    } catch (error) {
+      outputChannel.appendLine(`Error configuring diff editor: ${error}`);
+    }
+    
+    outputChannel.appendLine('Configured diff editor for single-pane editable view');
+    
     // Add version info
     // Using fs to read package.json directly for better type checking
     const packageJsonPath = path.join(__dirname, '../package.json');

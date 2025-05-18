@@ -100,9 +100,11 @@ async function openSimpleDiff(
       });
       
       // Open the diff using the shadowgit URI
+      // The diff will respect VS Code's diffEditor.renderSideBySide setting
+      // Users can toggle between split and inline view using the editor toolbar
       await vscode.commands.executeCommand('vscode.diff', 
         shadowGitUri, // Snapshot version via our custom URI scheme
-        uri,         // Current file
+        uri,         // Current file (editable)
         `Shadow Git ${type === 'main' ? 'Checkpoint' : 'Comparison'} Diff: ${path.basename(filePath)}`
       );
       
