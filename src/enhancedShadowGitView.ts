@@ -1,6 +1,7 @@
 // @ts-nocheck
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
 import { GitIntegration } from './gitIntegration';
@@ -70,7 +71,13 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
             vscode.commands.executeCommand('shadowGit.createCheckpoint')
               .then(() => {
                 console.log('Refreshing WebView after createCheckpoint command');
-                // Wait a short time to ensure the checkpoint is saved
+                
+                // DO NOT manually clear changes here
+                // The ShadowGit.createCheckpoint method already handles this properly
+                // Manual clearing can cause issues with detecting changes
+                console.log('Relying on ShadowGit.createCheckpoint to handle change clearing');
+                
+                // Wait a short time to ensure the checkpoint is saved and changes are cleared
                 setTimeout(() => this.refresh(), 500);
               });
           } else {
@@ -1058,7 +1065,23 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
     }
     
     // Get data from Shadow Git instances for the Checkpoints tab
-    const mainFiles = this.mainShadowGit.getTrackedFiles();
+    // IMPORTANT: Only show files that have CHANGES, not all tracked files
+    const trackedFiles = this.mainShadowGit.getTrackedFiles();
+    console.log(`Refresh: Found ${trackedFiles.length} tracked files`);
+    
+    // Get files with changes (use the changes Map instead of all tracked files)
+    const filesWithChanges: string[] = [];
+    
+    // The changes Map contains only files with actual changes
+    this.mainShadowGit.changes.forEach((changes, relativePath) => {
+      if (changes.length > 0) {
+        filesWithChanges.push(relativePath);
+      }
+    });
+    
+    console.log(`Refresh: Found ${filesWithChanges.length} files with changes`);
+    
+    // Get checkpoints
     const mainCheckpoints = this.mainShadowGit.getCheckpoints();
     
     // Get changes from actual Git for the Git Changes tab
@@ -1090,11 +1113,11 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       // Send data to WebView
       this._view.webview.postMessage({
         command: 'update',
-        mainFiles,
+        mainFiles: filesWithChanges, // Only files that have actual changes, not all tracked files
         mainCheckpoints,
-        workingFiles: gitFiles,  // Only show actual Git changed files
-        workingCheckpoints: [],  // No need for checkpoints in Git Changes tab
-        baseCommit: null,       // No concept of base commit anymore
+        workingFiles: gitFiles,      // Only show actual Git changed files
+        workingCheckpoints: [],      // No need for checkpoints in Git Changes tab
+        baseCommit: null,            // No concept of base commit anymore
         gitStatus: gitStatusMap,
         gitType: gitTypeMap,
         gitUriMap: gitUriMap
@@ -1105,7 +1128,7 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       // Fall back to showing no Git changes
       this._view.webview.postMessage({
         command: 'update',
-        mainFiles,
+        mainFiles: filesWithChanges, // Still show files with changes in the main tab
         mainCheckpoints,
         workingFiles: [],
         workingCheckpoints: [],
@@ -1143,13 +1166,29 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       const fullPath = path.join(this.mainShadowGit.workspaceRoot, filePath);
       
       if (type === 'main') {
-        // Take snapshot if not already taken
-        if (!this.mainShadowGit.snapshots.has(filePath)) {
-          this.mainShadowGit.takeSnapshot(fullPath);
+        // Check if file exists
+        if (!fs.existsSync(fullPath)) {
+          vscode.window.showErrorMessage(`File ${filePath} does not exist`);
+          return;
         }
         
-        // Detect changes
-        this.mainShadowGit.detectChanges(fullPath);
+        // DO NOT update the snapshot here as it would overwrite the baseline
+        // Instead, just detect changes against the existing snapshot
+        console.log(`Detecting changes for ${filePath} before diffing`);
+        
+        // Detect changes using the existing snapshot
+        const changes = this.mainShadowGit.detectChanges(fullPath);
+        console.log(`Detected ${changes.length} changes in ${filePath} for diff view`);
+        
+        // Only show diff if there are changes
+        if (changes.length === 0) {
+          vscode.window.showInformationMessage(`No changes detected in ${path.basename(filePath)}`);
+          
+          // Open the file in the editor for reference
+          const document = await vscode.workspace.openTextDocument(fullPath);
+          await vscode.window.showTextDocument(document);
+          return;
+        }
         
         // Use the main shadow git for diff
         await vscode.commands.executeCommand('shadowGit.openMainDiff', vscode.Uri.file(fullPath));
@@ -1173,11 +1212,11 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           });
         } catch (error) {
           console.error('Error opening Git diff:', error);
-          vscode.window.showErrorMessage("Failed to open Git diff: ${(error as Error).message}");
+          vscode.window.showErrorMessage(`Failed to open Git diff: ${(error as Error).message}`);
         }
       }
     } catch (error) {
-      vscode.window.showErrorMessage("Failed to open diff: ${(error as Error).message}");
+      vscode.window.showErrorMessage(`Failed to open diff: ${(error as Error).message}`);
     }
   }
   
@@ -1189,7 +1228,7 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
     // Store the base commit ID in workspace state
     this.context.workspaceState.update('shadowgit.baseCommit', commitId);
     this.workingShadowGit.setBaseCommit(commitId);
-    vscode.window.showInformationMessage("Set commit ${commitId.substring(0, 8)} as the new base reference");
+    vscode.window.showInformationMessage(`Set commit ${commitId.substring(0, 8)} as the new base reference`);
     this.refresh();
   }
   

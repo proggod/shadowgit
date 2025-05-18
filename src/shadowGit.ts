@@ -449,10 +449,51 @@ export class ShadowGit {
     
     console.log(`ShadowGit.createCheckpoint: Created checkpoint ${checkpoint.id} with ${Object.keys(approvedChanges).length} files`);
     
-    // Clear all changes since they've been added to the checkpoint
+    // Clear all changes and update snapshots since they've been added to the checkpoint
+    console.log(`ShadowGit.createCheckpoint: Clearing all changes and updating snapshots for ${trackedFiles.length} tracked files`);
+    
+    // First clear the changes Map
+    this.changes.clear();
+    
+    // Update all snapshots to the current state, then clear changes for all files
     for (const relativePath of trackedFiles) {
-      this.changes.set(relativePath, []);
-      this.saveChanges(relativePath, []);
+      try {
+        // Get the full path to the file
+        const filePath = path.join(this.workspaceRoot, relativePath);
+        
+        // Make sure the file exists
+        if (fs.existsSync(filePath)) {
+          // Take a new snapshot of the current state - this is critical for the diff to work correctly
+          console.log(`ShadowGit.createCheckpoint: Updating snapshot for ${relativePath}`);
+          this.takeSnapshot(filePath);
+        }
+        
+        // Clear changes for this file
+        this.changes.set(relativePath, []);
+        this.saveChanges(relativePath, []);
+        
+        console.log(`ShadowGit.createCheckpoint: Cleared changes for ${relativePath}`);
+      } catch (error) {
+        console.error(`ShadowGit.createCheckpoint: Error updating snapshot or clearing changes for ${relativePath}:`, error);
+      }
+    }
+    
+    // Force file system write to complete
+    try {
+      // Use fsync to ensure changes are written to disk
+      const changesDir = path.join(this.shadowDir, 'changes');
+      fs.readdirSync(changesDir).forEach(file => {
+        try {
+          const filePath = path.join(changesDir, file);
+          const fd = fs.openSync(filePath, 'r');
+          fs.fsyncSync(fd);
+          fs.closeSync(fd);
+        } catch (e) {
+          // Ignore errors for individual files
+        }
+      });
+    } catch (error) {
+      // Ignore errors with fsync
     }
     
     return checkpoint;
@@ -460,8 +501,9 @@ export class ShadowGit {
   
   /**
    * Detect changes in all tracked files
+   * Made public so extension.ts can call it
    */
-  private detectChangesInAllTrackedFiles(): void {
+  public detectChangesInAllTrackedFiles(): void {
     console.log(`ShadowGit.detectChangesInAllTrackedFiles: Detecting changes in all ${this.snapshots.size} tracked files`);
     
     // Log what files have changes before detection
@@ -520,6 +562,17 @@ export class ShadowGit {
     
     // Apply changes from the checkpoint
     const restoredFiles = [];
+    const failedFiles = [];
+    
+    // First, we need to get a list of all files that have changes currently
+    // These might need special handling to ensure they're properly restored
+    const filesWithCurrentChanges = new Set<string>();
+    this.changes.forEach((changes, relativePath) => {
+      if (changes.length > 0) {
+        filesWithCurrentChanges.add(relativePath);
+        console.log(`ShadowGit.applyCheckpoint: File ${relativePath} has ${changes.length} current changes`);
+      }
+    });
     
     // COMPLETELY NEW APPROACH: Go back to original snapshot and re-apply specific changes
     for (const [relativePath, changes] of Object.entries(checkpoint.changes)) {
@@ -534,6 +587,7 @@ export class ShadowGit {
         
         if (!snapshot) {
           console.warn(`ShadowGit.applyCheckpoint: No snapshot found for ${relativePath}, skipping`);
+          failedFiles.push(relativePath);
           continue;
         }
         
@@ -558,11 +612,29 @@ export class ShadowGit {
         console.log(`ShadowGit.applyCheckpoint: Taking new snapshot of ${filePath}`);
         this.takeSnapshot(filePath);
         
+        // Clear any current changes for this file
+        this.changes.set(relativePath, []);
+        this.saveChanges(relativePath, []);
+        
         restoredFiles.push(relativePath);
         console.log(`ShadowGit.applyCheckpoint: Successfully restored ${filePath}`);
       } catch (error) {
         console.error(`ShadowGit.applyCheckpoint: Failed to apply checkpoint to ${filePath}:`, error);
+        failedFiles.push(relativePath);
       }
+    }
+    
+    // Check for files that had current changes but weren't in the checkpoint
+    // These might be files that were just modified and we didn't expect to restore
+    for (const currentChangePath of filesWithCurrentChanges) {
+      if (!checkpoint.changes[currentChangePath]) {
+        console.log(`ShadowGit.applyCheckpoint: WARNING - File ${currentChangePath} has current changes but was not in checkpoint`);
+      }
+    }
+    
+    // Add error details if any files failed to restore
+    if (failedFiles.length > 0) {
+      console.error(`ShadowGit.applyCheckpoint: Failed to restore ${failedFiles.length} files: ${failedFiles.join(', ')}`);
     }
     
     console.log(`ShadowGit.applyCheckpoint: Completed restore of checkpoint ${checkpointId}, restored ${restoredFiles.length} files: ${restoredFiles.join(', ')}`);
@@ -576,6 +648,7 @@ export class ShadowGit {
   private findSnapshotForFile(relativePath: string): Snapshot | null {
     // First check if we have a current snapshot
     if (this.snapshots.has(relativePath)) {
+      console.log(`ShadowGit.findSnapshotForFile: Found in-memory snapshot for ${relativePath}`);
       return this.snapshots.get(relativePath)!;
     }
     
@@ -583,6 +656,7 @@ export class ShadowGit {
     try {
       const snapshotPath = path.join(this.shadowDir, 'snapshots', `${relativePath}.json`);
       if (fs.existsSync(snapshotPath)) {
+        console.log(`ShadowGit.findSnapshotForFile: Loading snapshot from disk for ${relativePath}`);
         const content = fs.readFileSync(snapshotPath, 'utf8');
         return JSON.parse(content) as Snapshot;
       }
@@ -590,6 +664,27 @@ export class ShadowGit {
       console.error(`ShadowGit.findSnapshotForFile: Error reading snapshot for ${relativePath}:`, error);
     }
     
+    // If we still don't have a snapshot, try to create one from the current file content
+    try {
+      const fullPath = path.join(this.workspaceRoot, relativePath);
+      if (fs.existsSync(fullPath)) {
+        console.log(`ShadowGit.findSnapshotForFile: Creating temporary snapshot from current state for ${relativePath}`);
+        const content = fs.readFileSync(fullPath, 'utf8');
+        const lines = content.split('\n');
+        
+        // Create a new snapshot from current file content
+        return {
+          hash: this.hashContent(content),
+          content,
+          timestamp: Date.now(),
+          lines
+        };
+      }
+    } catch (error) {
+      console.error(`ShadowGit.findSnapshotForFile: Error creating temporary snapshot for ${relativePath}:`, error);
+    }
+    
+    console.error(`ShadowGit.findSnapshotForFile: Could not find or create snapshot for ${relativePath}`);
     return null;
   }
   
@@ -603,24 +698,47 @@ export class ShadowGit {
   private getFileContentAtCheckpoint(relativePath: string, snapshot: Snapshot, changes: Change[]): string {
     console.log(`ShadowGit.getFileContentAtCheckpoint: Reconstructing content for ${relativePath} at checkpoint time`);
     
+    // Check if we have a single full-file change, which is common
+    if (changes.length === 1 && 
+        changes[0].type === 'modification' && 
+        changes[0].startLine === 0 && 
+        changes[0].content) {
+      // Special case for full file changes - just use the content directly
+      console.log(`ShadowGit.getFileContentAtCheckpoint: Using direct content from full-file change (${changes[0].content.length} bytes)`);
+      return changes[0].content;
+    }
+    
     // Start with the snapshot content
     const contentLines = [...snapshot.lines];
     
     // Apply the changes in order
+    let changeCount = 0;
     for (const change of changes) {
-      console.log(`ShadowGit.getFileContentAtCheckpoint: Applying ${change.type} at lines ${change.startLine}-${change.endLine}`);
+      // Skip if content is missing or if the change is not valid
+      if (!change.content || change.startLine < 0 || change.endLine < change.startLine) {
+        console.warn(`ShadowGit.getFileContentAtCheckpoint: Skipping invalid change: ${JSON.stringify(change)}`);
+        continue;
+      }
       
-      if (change.type === 'addition' || change.type === 'modification') {
-        const changeLines = change.content.split('\n');
-        contentLines.splice(change.startLine, change.endLine - change.startLine + 1, ...changeLines);
-      } else if (change.type === 'deletion') {
-        contentLines.splice(change.startLine, change.endLine - change.startLine + 1);
+      try {
+        console.log(`ShadowGit.getFileContentAtCheckpoint: Applying ${change.type} at lines ${change.startLine}-${change.endLine}`);
+        
+        if (change.type === 'addition' || change.type === 'modification') {
+          const changeLines = change.content.split('\n');
+          contentLines.splice(change.startLine, change.endLine - change.startLine + 1, ...changeLines);
+          changeCount++;
+        } else if (change.type === 'deletion') {
+          contentLines.splice(change.startLine, change.endLine - change.startLine + 1);
+          changeCount++;
+        }
+      } catch (error) {
+        console.error(`ShadowGit.getFileContentAtCheckpoint: Error applying change: ${error}`);
       }
     }
     
     // Join the lines and return the content
     const content = contentLines.join('\n');
-    console.log(`ShadowGit.getFileContentAtCheckpoint: Reconstructed ${content.length} bytes of content`);
+    console.log(`ShadowGit.getFileContentAtCheckpoint: Applied ${changeCount}/${changes.length} changes, reconstructed ${content.length} bytes of content`);
     return content;
   }
 

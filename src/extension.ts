@@ -359,9 +359,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         progress.report({ message: 'Finding all workspace files...', increment: 20 });
         
         // Find all files in workspace using VS Code's file search
+        // VS Code's findFiles respects the files.exclude setting which typically includes .gitignore patterns
         const files = await vscode.workspace.findFiles(
-          '**/*.*', // Include all files with extensions
-          '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
+          '**/*.*',  // Include all files with extensions
+          undefined   // Use default exclusion patterns (includes .gitignore patterns)
         );
         
         outputChannel.appendLine(`Found ${files.length} files in workspace to track`);
@@ -812,27 +813,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         progress.report({ message: 'Scanning workspace files...' });
         
         // Find all tracked files
-        const trackedFiles = mainShadowGit.getTrackedFiles();
-        outputChannel.appendLine(`Currently tracking ${trackedFiles.length} files`);
-        console.log(`SHADOW_GIT_DEBUG: Currently tracking ${trackedFiles.length} files`);
+        // Initialize variable for scope
+        let changedFilesCount = 0;
         
-        // Force detection of changes
-        outputChannel.appendLine('Detecting changes in all workspace files');
-        mainShadowGit.detectChangesInAllTrackedFiles();
-        
-        // See how many files have changes
-        const changedFilesCount = mainShadowGit.changes.size;
-        outputChannel.appendLine(`Found ${changedFilesCount} files with changes`);
-        console.log(`SHADOW_GIT_DEBUG: Found ${changedFilesCount} files with changes`);
+        if (mainShadowGit) {
+          const trackedFiles = mainShadowGit.getTrackedFiles();
+          outputChannel.appendLine(`Currently tracking ${trackedFiles.length} files`);
+          console.log(`SHADOW_GIT_DEBUG: Currently tracking ${trackedFiles.length} files`);
+          
+          // Force detection of changes
+          outputChannel.appendLine('Detecting changes in all workspace files');
+          mainShadowGit.detectChangesInAllTrackedFiles();
+          
+          // See how many files have changes
+          changedFilesCount = mainShadowGit.changes.size;
+          outputChannel.appendLine(`Found ${changedFilesCount} files with changes`);
+          console.log(`SHADOW_GIT_DEBUG: Found ${changedFilesCount} files with changes`);
+        } else {
+          outputChannel.appendLine('mainShadowGit is null, cannot detect changes');
+          console.log('SHADOW_GIT_DEBUG: mainShadowGit is null, cannot detect changes');
+        }
         
         if (changedFilesCount === 0) {
           // Find all files in the workspace 
           progress.report({ message: 'No changes found. Scanning for new files...' });
           
           // Find all files using VS Code workspace find files API
+          // This respects VS Code's files.exclude setting which includes .gitignore patterns
           const files = await vscode.workspace.findFiles(
-            '**/*.*', // Include all files
-            '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
+            '**/*.*',  // Include all files
+            undefined   // Use default exclusion patterns (includes .gitignore patterns)
           );
           
           outputChannel.appendLine(`Found ${files.length} workspace files to check`);
@@ -866,8 +876,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               }
               
               // Take a snapshot and then detect changes
-              mainShadowGit.takeSnapshot(file.fsPath);
-              const changes = mainShadowGit.detectChanges(file.fsPath);
+              let changes: any[] = [];
+              if (mainShadowGit) {
+                mainShadowGit.takeSnapshot(file.fsPath);
+                changes = mainShadowGit.detectChanges(file.fsPath);
+              }
               
               if (changes.length > 0) {
                 newChangesFound++;
@@ -1174,7 +1187,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         title: `Restoring checkpoint: ${checkpoint.message}`,
         cancellable: false
       }, async (progress) => {
-        // Apply the checkpoint
+        progress.report({ message: 'Checking for current modifications...' });
+        
+        // Check current modified files that may need special handling
+        let currentlyModifiedFiles: string[] = [];
+        
+        // Force detect changes in all tracked files to make sure we have the latest changes
+        if (targetShadowGit) {
+          targetShadowGit.detectChangesInAllTrackedFiles();
+          
+          // Get list of all files with current changes
+          targetShadowGit.changes.forEach((changes, filePath) => {
+            if (changes.length > 0) {
+              currentlyModifiedFiles.push(filePath);
+            }
+          });
+          
+          outputChannel.appendLine(`Found ${currentlyModifiedFiles.length} currently modified files: ${currentlyModifiedFiles.join(', ')}`);
+          console.log(`SHADOW_GIT_DEBUG: Currently modified files: ${currentlyModifiedFiles.join(', ')}`);
+        }
+        
+        progress.report({ message: 'Applying checkpoint...' });
+        
+        // Apply the checkpoint - our enhanced version handles current changes properly
         targetShadowGit!.applyCheckpoint(checkpointId);
         
         // Show detailed information
@@ -1192,11 +1227,29 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Attempt to open one of the restored files to confirm changes
       if (affectedFiles.length > 0) {
         try {
-          const firstFile = path.join(targetShadowGit.workspaceRoot, affectedFiles[0]);
-          outputChannel.appendLine(`Opening restored file for confirmation: ${firstFile}`);
-          const document = await vscode.workspace.openTextDocument(firstFile);
+          // If the active editor had a file, use that as the first choice
+          let fileToOpen = null;
+          
+          if (vscode.window.activeTextEditor) {
+            const activePath = vscode.window.activeTextEditor.document.uri.fsPath;
+            const relativeActivePath = path.relative(targetShadowGit.workspaceRoot, activePath);
+            
+            // If the active file was affected by the checkpoint, use it
+            if (affectedFiles.includes(relativeActivePath)) {
+              fileToOpen = activePath;
+              outputChannel.appendLine(`Using active editor file for confirmation: ${fileToOpen}`);
+            }
+          }
+          
+          // If no active editor file chosen, use the first file in affectedFiles
+          if (!fileToOpen) {
+            fileToOpen = path.join(targetShadowGit.workspaceRoot, affectedFiles[0]);
+          }
+          
+          outputChannel.appendLine(`Opening restored file for confirmation: ${fileToOpen}`);
+          const document = await vscode.workspace.openTextDocument(fileToOpen);
           await vscode.window.showTextDocument(document);
-          outputChannel.appendLine(`Successfully opened restored file: ${firstFile}`);
+          outputChannel.appendLine(`Successfully opened restored file: ${fileToOpen}`);
         } catch (err) {
           outputChannel.appendLine(`Failed to open restored file for confirmation: ${err}`);
         }
@@ -1329,17 +1382,90 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
     
-    // Check if this is a tracked file
+    // Make sure this is a file, not a directory
+    try {
+      const stats = fs.statSync(uri.fsPath);
+      if (!stats.isFile()) {
+        return;
+      }
+    } catch (error) {
+      return; // File might have been deleted
+    }
+    
+    // Skip files larger than 5MB to prevent performance issues
+    try {
+      const stats = fs.statSync(uri.fsPath);
+      if (stats.size > 5 * 1024 * 1024) { // Skip files larger than 5MB
+        return;
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+    
+    // Respect VS Code's excludes patterns - which typically include .gitignore patterns
+    try {
+      // Check if this file should be excluded based on VS Code settings
+      const excludePatterns = vscode.workspace.getConfiguration('files').get('exclude');
+      const fileBaseName = path.basename(uri.fsPath);
+      const relativePath = vscode.workspace.asRelativePath(uri.fsPath);
+      
+      // Check against common exclusions that are typically in .gitignore
+      if (
+        excludePatterns && 
+        Object.keys(excludePatterns).some(pattern => {
+          // Convert glob pattern to regex
+          const regexPattern = pattern
+            .replace(/\./g, '\\.')
+            .replace(/\*/g, '.*')
+            .replace(/\?/g, '.');
+          const regex = new RegExp(`^${regexPattern}$`);
+          return regex.test(fileBaseName) || regex.test(relativePath);
+        })
+      ) {
+        console.log(`Skipping excluded file: ${uri.fsPath}`);
+        return;
+      }
+    } catch (error) {
+      // Ignore errors in exclusion checking
+    }
+    
+    // Process the file change
     if (mainShadowGit) {
       const relativePath = path.relative(mainShadowGit.workspaceRoot, uri.fsPath);
-      if (mainShadowGit.snapshots.has(relativePath)) {
-        // Detect changes
-        mainShadowGit.detectChanges(uri.fsPath);
-        workingShadowGit!.detectChanges(uri.fsPath);
+      
+      // Take a snapshot ONLY if not already tracked
+      if (!mainShadowGit.snapshots.has(relativePath)) {
+        try {
+          console.log(`Taking initial snapshot for ${uri.fsPath} - new file`);
+          mainShadowGit.takeSnapshot(uri.fsPath);
+        } catch (error) {
+          console.error(`Failed to take snapshot of ${uri.fsPath}:`, error);
+        }
+      }
+      
+      // Now detect changes against the existing snapshot
+      try {
+        console.log(`File changed: ${uri.fsPath} - detecting changes against existing snapshot`);
+        const changes = mainShadowGit.detectChanges(uri.fsPath);
+        console.log(`Detected ${changes.length} changes in ${uri.fsPath}`);
+        
+        if (workingShadowGit) {
+          // For working git, also only take new snapshots for new files
+          const workingRelativePath = path.relative(workingShadowGit.workspaceRoot, uri.fsPath);
+          if (!workingShadowGit.snapshots.has(workingRelativePath)) {
+            workingShadowGit.takeSnapshot(uri.fsPath);
+          }
+          workingShadowGit.detectChanges(uri.fsPath);
+        }
         
         // Update SCM
         mainSCMProvider?.update();
         workingSCMProvider?.update();
+        
+        // Also refresh the webview
+        vscode.commands.executeCommand('shadowGit.refresh');
+      } catch (error) {
+        console.error(`Error detecting changes in ${uri.fsPath}:`, error);
       }
     }
   });
@@ -1353,17 +1479,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         !document.uri.fsPath.includes('.vscode/.shadowgit-') &&
         mainShadowGit) {
       try {
-        console.log("Taking auto-snapshot of ${document.uri.fsPath}");
-        mainShadowGit.takeSnapshot(document.uri.fsPath);
-        if (workingShadowGit) {
-          workingShadowGit.takeSnapshot(document.uri.fsPath);
+        const relativePath = path.relative(mainShadowGit.workspaceRoot, document.uri.fsPath);
+        
+        // Only take a snapshot if this is a new file
+        if (!mainShadowGit.snapshots.has(relativePath)) {
+          console.log(`Taking initial snapshot of ${document.uri.fsPath} - new file being opened`);
+          mainShadowGit.takeSnapshot(document.uri.fsPath);
+          
+          if (workingShadowGit) {
+            const workingRelativePath = path.relative(workingShadowGit.workspaceRoot, document.uri.fsPath);
+            if (!workingShadowGit.snapshots.has(workingRelativePath)) {
+              workingShadowGit.takeSnapshot(document.uri.fsPath);
+            }
+          }
+          
+          // Update UI
+          mainSCMProvider?.update();
+          
+          // Log success
+          console.log(`Successfully took initial snapshot of ${document.fileName}`);
+        } else {
+          // For already tracked files, detect changes against existing snapshot
+          console.log(`File ${document.uri.fsPath} is already tracked, detecting changes`);
+          mainShadowGit.detectChanges(document.uri.fsPath);
         }
-        
-        // Update UI
-        mainSCMProvider?.update();
-        
-        // Log success
-        console.log("Successfully took snapshot of ${document.fileName}");
       } catch (error) {
         // Log errors
         console.error(`Auto-snapshot failed for ${document.fileName}:`, error);
@@ -1371,20 +1510,47 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
   
-  // Also take snapshots when files are saved
+  // Also take snapshots and detect changes when files are saved
   vscode.workspace.onDidSaveTextDocument(document => {
     if (document.uri.scheme === 'file' && 
         !document.uri.fsPath.includes('.vscode/.shadowgit-') &&
         mainShadowGit) {
       try {
-        console.log("Taking snapshot of saved file ${document.uri.fsPath}");
-        mainShadowGit.takeSnapshot(document.uri.fsPath);
+        console.log(`Taking snapshot of saved file ${document.uri.fsPath}`);
+        
+        const relativePath = path.relative(mainShadowGit.workspaceRoot, document.uri.fsPath);
+        
+        // For new files, make an initial snapshot to track them
+        if (!mainShadowGit.snapshots.has(relativePath)) {
+          mainShadowGit.takeSnapshot(document.uri.fsPath);
+          outputChannel.appendLine(`Added new file to tracking: ${document.uri.fsPath}`);
+        }
+        
+        // Do NOT take a new snapshot here for existing files
+        // Instead, just detect changes against the current snapshot
+        // This preserves the original baseline for diffing
+        const changes = mainShadowGit.detectChanges(document.uri.fsPath);
+        console.log(`Detected ${changes.length} changes in ${document.uri.fsPath} after save`);
+        
         if (workingShadowGit) {
-          workingShadowGit.takeSnapshot(document.uri.fsPath);
+          // For working git, we need to handle differently since it's integrated with actual Git
+          const workingRelativePath = path.relative(workingShadowGit.workspaceRoot, document.uri.fsPath);
+          
+          // Only take a new snapshot for new files
+          if (!workingShadowGit.snapshots.has(workingRelativePath)) {
+            workingShadowGit.takeSnapshot(document.uri.fsPath);
+          }
+          
+          // Detect changes against current snapshot
+          workingShadowGit.detectChanges(document.uri.fsPath);
         }
         
         // Update UI
         mainSCMProvider?.update();
+        
+        // Also refresh the WebView
+        vscode.commands.executeCommand('shadowGit.refresh');
+        
       } catch (error) {
         console.error(`Save-snapshot failed for ${document.fileName}:`, error);
       }
