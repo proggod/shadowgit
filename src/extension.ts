@@ -326,18 +326,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   });
   
-  // Command: Take a snapshot in Main Shadow Git only - Enhanced to handle all open editors
+  // Command: Take a snapshot in Main Shadow Git only - Enhanced to handle all files in workspace
   const takeMainSnapshotCommand = vscode.commands.registerCommand('shadowGit.takeMainSnapshot', async () => {
     if (!mainShadowGit) {
       vscode.window.showErrorMessage('No workspace folder open');
-      return;
-    }
-    
-    // Get all visible text editors
-    const allOpenEditors = vscode.window.visibleTextEditors;
-    
-    if (allOpenEditors.length === 0) {
-      vscode.window.showErrorMessage('No open editors to snapshot');
       return;
     }
     
@@ -345,53 +337,117 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Create progress indicator
       await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Taking Checkpoint Snapshots',
+        title: 'Updating File Tracking',
         cancellable: false
       }, async (progress) => {
-        // Track how many files we snapshot
+        outputChannel.appendLine('Taking snapshots of workspace files');
+        
+        // First process all open editors to ensure they're saved
+        const allOpenEditors = vscode.window.visibleTextEditors;
+        for (const editor of allOpenEditors) {
+          if (editor.document.uri.scheme === 'file' && 
+              !editor.document.uri.fsPath.includes('.vscode/.shadowgit-')) {
+            try {
+              // Save the document first
+              await editor.document.save();
+            } catch (error) {
+              console.error(`Failed to save document ${editor.document.uri.fsPath}:`, error);
+            }
+          }
+        }
+        
+        progress.report({ message: 'Finding all workspace files...', increment: 20 });
+        
+        // Find all files in workspace using VS Code's file search
+        const files = await vscode.workspace.findFiles(
+          '**/*.*', // Include all files with extensions
+          '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
+        );
+        
+        outputChannel.appendLine(`Found ${files.length} files in workspace to track`);
+        console.log(`SHADOW_GIT_DEBUG: Found ${files.length} files in workspace to track`);
+        
+        // Take snapshots of files
         let fileCount = 0;
         
-        // Process each editor
-        for (const editor of allOpenEditors) {
-          // Skip non-file schemes and shadow git files
-          if (editor.document.uri.scheme !== 'file' || 
-              editor.document.uri.fsPath.includes('.vscode/.shadowgit-')) {
-            continue;
-          }
+        // Process files in batches to update progress
+        const batchSize = 20;
+        for (let i = 0; i < files.length; i += batchSize) {
+          const batch = files.slice(i, i + batchSize);
           
-          try {
-            // Update progress
-            progress.report({ 
-              message: `Processing ${path.basename(editor.document.uri.fsPath)}`,
-              increment: 100 / allOpenEditors.length
-            });
-            
-            // Save the document first
-            await editor.document.save();
-            
-            // Take the snapshot
-            const filePath = editor.document.uri.fsPath;
-            if (mainShadowGit) {
-              mainShadowGit.takeSnapshot(filePath);
+          // Update progress
+          progress.report({ 
+            message: `Processing files ${i + 1}-${Math.min(i + batchSize, files.length)} of ${files.length}`,
+            increment: (batch.length / files.length) * 80
+          });
+          
+          // Process batch
+          for (const fileUri of batch) {
+            try {
+              // Skip files that are too large or binary
+              try {
+                const stats = fs.statSync(fileUri.fsPath);
+                if (stats.size > 1024 * 1024) { // Skip files larger than 1MB
+                  continue;
+                }
+              } catch (error) {
+                // Skip files that can't be stat'd
+                continue;
+              }
+              
+              // Skip files in excluded directories
+              if (fileUri.fsPath.includes('node_modules') || 
+                  fileUri.fsPath.includes('.git') || 
+                  fileUri.fsPath.includes('.vscode/.shadowgit-')) {
+                continue;
+              }
+              
+              // Take the snapshot
+              if (mainShadowGit) {
+                try {
+                  mainShadowGit.takeSnapshot(fileUri.fsPath);
+                  fileCount++;
+                } catch (error) {
+                  // Skip files that can't be snapshotted
+                  console.error(`Failed to take snapshot of ${fileUri.fsPath}:`, error);
+                }
+              }
+            } catch (error) {
+              console.error(`Error processing ${fileUri.fsPath}:`, error);
             }
-            fileCount++;
-          } catch (error) {
-            console.error(`Failed to take snapshot of ${editor.document.uri.fsPath}:`, error);
           }
         }
         
         // Show success message
         if (fileCount > 0) {
-          vscode.window.showInformationMessage(`Snapshots taken of ${fileCount} files`);
+          vscode.window.showInformationMessage(`Updated tracking for ${fileCount} files`);
         } else {
-          vscode.window.showInformationMessage('No new snapshots taken');
+          vscode.window.showInformationMessage('No new files tracked');
+        }
+        
+        // Force change detection to find all changed files
+        outputChannel.appendLine('Detecting changes in all tracked files');
+        console.log('SHADOW_GIT_DEBUG: Detecting changes in all tracked files');
+        
+        // Make sure we detect changes in all tracked files
+        if (mainShadowGit) {
+          try {
+            const trackedFilesBefore = mainShadowGit.getTrackedFiles().length;
+            mainShadowGit.detectChangesInAllTrackedFiles();
+            const changedFilesCount = mainShadowGit.changes.size;
+            
+            outputChannel.appendLine(`Found ${changedFilesCount} files with changes out of ${trackedFilesBefore} tracked files`);
+            console.log(`SHADOW_GIT_DEBUG: Found ${changedFilesCount} files with changes out of ${trackedFilesBefore} tracked files`);
+          } catch (error) {
+            console.error('Error detecting changes:', error);
+          }
         }
         
         // Refresh UI
         mainSCMProvider?.update();
       });
     } catch (error) {
-      vscode.window.showErrorMessage(`Failed to take snapshots: ${(error as Error).message}`);
+      vscode.window.showErrorMessage(`Failed to update file tracking: ${(error as Error).message}`);
     }
   });
   
@@ -747,58 +803,87 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     
     try {
-      // Show progress indicator while taking snapshots of all project files
+      // First, scan for all changed files in the workspace to make sure we capture all changes
       await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: 'Preparing Checkpoint',
+        title: 'Finding changes for checkpoint',
         cancellable: false
       }, async (progress) => {
-        progress.report({ message: 'Taking snapshots of all project files...' });
+        progress.report({ message: 'Scanning workspace files...' });
         
-        // Get all files in the project (excluding those in .gitignore)
-        outputChannel.appendLine('Finding all files in project for checkpoint');
-        console.log('SHADOW_GIT_DEBUG: Finding all files in project for checkpoint');
+        // Find all tracked files
+        const trackedFiles = mainShadowGit.getTrackedFiles();
+        outputChannel.appendLine(`Currently tracking ${trackedFiles.length} files`);
+        console.log(`SHADOW_GIT_DEBUG: Currently tracking ${trackedFiles.length} files`);
         
-        // Find all files using VS Code workspace find files API
-        const files = await vscode.workspace.findFiles(
-          '**/*.*', // Include all files
-          '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
-        );
+        // Force detection of changes
+        outputChannel.appendLine('Detecting changes in all workspace files');
+        mainShadowGit.detectChangesInAllTrackedFiles();
         
-        outputChannel.appendLine(`Found ${files.length} files in project`);
-        console.log("SHADOW_GIT_DEBUG: Found ${files.length} files in project");
+        // See how many files have changes
+        const changedFilesCount = mainShadowGit.changes.size;
+        outputChannel.appendLine(`Found ${changedFilesCount} files with changes`);
+        console.log(`SHADOW_GIT_DEBUG: Found ${changedFilesCount} files with changes`);
         
-        // Take snapshots of all files
-        let processedCount = 0;
-        for (const file of files) {
-          try {
-            // Skip very large files, binary files, etc.
-            const stats = fs.statSync(file.fsPath);
-            if (stats.size > 1024 * 1024) { // Skip files larger than 1MB
-              continue;
-            }
-            
-            // Take snapshot (with null check even though we've already checked above)
-            if (mainShadowGit) {
+        if (changedFilesCount === 0) {
+          // Find all files in the workspace 
+          progress.report({ message: 'No changes found. Scanning for new files...' });
+          
+          // Find all files using VS Code workspace find files API
+          const files = await vscode.workspace.findFiles(
+            '**/*.*', // Include all files
+            '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
+          );
+          
+          outputChannel.appendLine(`Found ${files.length} workspace files to check`);
+          console.log(`SHADOW_GIT_DEBUG: Found ${files.length} workspace files to check`);
+          
+          // Check some files that might have been missed
+          let newChangesFound = 0;
+          let processedCount = 0;
+          
+          for (const file of files) {
+            try {
+              if (processedCount % 10 === 0) {
+                progress.report({ 
+                  message: `Checking for changes (${processedCount}/${files.length})...`,
+                  increment: (10 / files.length) * 100
+                });
+              }
+              
+              const stats = fs.statSync(file.fsPath);
+              // Skip large files
+              if (stats.size > 1024 * 1024) {
+                continue;
+              }
+              
+              // Skip files that might be binary
+              if (file.fsPath.endsWith('.jpg') || 
+                  file.fsPath.endsWith('.png') || 
+                  file.fsPath.endsWith('.gif') ||
+                  file.fsPath.endsWith('.pdf')) {
+                continue;
+              }
+              
+              // Take a snapshot and then detect changes
               mainShadowGit.takeSnapshot(file.fsPath);
+              const changes = mainShadowGit.detectChanges(file.fsPath);
+              
+              if (changes.length > 0) {
+                newChangesFound++;
+                outputChannel.appendLine(`Found ${changes.length} changes in ${file.fsPath}`);
+                console.log(`SHADOW_GIT_DEBUG: Found ${changes.length} changes in ${file.fsPath}`);
+              }
+              
               processedCount++;
+            } catch (error) {
+              // Skip files that can't be processed
             }
-            
-            // Update progress periodically
-            if (processedCount % 10 === 0) {
-              progress.report({ 
-                message: `Processing files... ${processedCount}/${files.length}`,
-                increment: (10 / files.length) * 100
-              });
-            }
-          } catch (error) {
-            // Skip files that can't be processed
-            console.error(`Failed to take snapshot of ${file.fsPath}:`, error);
           }
+          
+          outputChannel.appendLine(`Found ${newChangesFound} new files with changes`);
+          console.log(`SHADOW_GIT_DEBUG: Found ${newChangesFound} new files with changes`);
         }
-        
-        outputChannel.appendLine(`Processed ${processedCount} files for checkpoint`);
-        console.log("SHADOW_GIT_DEBUG: Processed ${processedCount} files for checkpoint");
       });
       
       // Now prompt for checkpoint message
@@ -811,10 +896,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return; // User cancelled
       }
       
-      // Create the checkpoint
+      // Create the checkpoint with force approval for all changes
       outputChannel.appendLine(`Creating checkpoint with message: ${message}`);
-      console.log("SHADOW_GIT_DEBUG: Creating checkpoint with message: ${message}");
+      console.log(`SHADOW_GIT_DEBUG: Creating checkpoint with message: ${message}`);
       
+      // Get all current changes for logging
+      const changesBeforeCount = mainShadowGit.changes.size;
+      const filesWithChanges = Array.from(mainShadowGit.changes.keys());
+      outputChannel.appendLine(`Creating checkpoint with ${changesBeforeCount} files with changes`);
+      outputChannel.appendLine(`Files with changes: ${filesWithChanges.join(', ')}`);
+      
+      // Approve all changes explicitly
+      for (const filePath of filesWithChanges) {
+        try {
+          const fullPath = path.join(mainShadowGit.workspaceRoot, filePath);
+          mainShadowGit.approveAllChanges(fullPath);
+        } catch (error) {
+          console.error(`Error approving changes for ${filePath}:`, error);
+        }
+      }
+      
+      // Now create the checkpoint
       const checkpoint = mainShadowGit.createCheckpoint(message);
       
       // Show information about the checkpoint files
@@ -823,21 +925,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       outputChannel.appendLine(`Created checkpoint ${checkpoint.id} with message "${message}"`);
       outputChannel.appendLine(`Checkpoint contains ${filesCount} files: ${filesList}`);
-      console.log("SHADOW_GIT_DEBUG: Created checkpoint with ${filesCount} files: ${filesList}");
+      console.log(`SHADOW_GIT_DEBUG: Created checkpoint with ${filesCount} files: ${filesList}`);
       
       // More descriptive success message
-      vscode.window.showInformationMessage(
-        `Checkpoint created: ${checkpoint.id.substring(0, 8)} with ${filesCount} files`
-      );
+      let successMessage = `Checkpoint created: ${checkpoint.id.substring(0, 8)}`;
+      if (filesCount > 0) {
+        successMessage += ` with ${filesCount} files`;
+      } else {
+        successMessage += ` (no changes detected in any files)`;
+      }
+      
+      vscode.window.showInformationMessage(successMessage);
       
       // Refresh WebView - first try through commands
       try {
         // Force refresh the WebView
         outputChannel.appendLine(`Refreshing WebView after checkpoint creation`);
-        await vscode.commands.executeCommand('workbench.view.extension.shadowGitView');
+        // Try the safer refresh command directly
         await vscode.commands.executeCommand('shadowGit.refresh');
       } catch (refreshError) {
         outputChannel.appendLine(`Error refreshing view: ${refreshError}`);
+        // Just log the error but don't stop execution
       }
       
       // Refresh everything
@@ -952,7 +1060,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       // Confirm deletion
       const confirmDelete = await vscode.window.showWarningMessage(
-        `Are you sure you want to delete checkpoint "${message}" (${actualCheckpointId.substring(0, 8)})? This action cannot be undone.`,
+        `Are you sure you want to delete1 checkpoint "${message}" (${actualCheckpointId.substring(0, 8)})? This action cannot be undone.`,
         { modal: true },
         'Delete'
       );
@@ -1118,81 +1226,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.showInformationMessage('Shadow Git Test Command Works!');
   });
 
-  // Add a test command for debugging purposes (disabled for production)
-  const testDeleteCommand = vscode.commands.registerCommand('shadowGit.testDelete', async () => {
-    outputChannel.appendLine('Test delete command executed!');
-    console.log('SHADOW_GIT_DEBUG: Test delete command is now disabled to avoid duplication');
-    vscode.window.showInformationMessage('Please use the regular deletion functionality from the UI');
-    
-    // Original functionality is commented out to avoid duplicate deletion workflow
-    /*
-    try {
-      // Get the workspace root
-      if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage('No workspace folder open');
-        return;
-      }
-      const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
-      console.log('Workspace root:', workspaceRoot);
-      
-      // Find checkpoints in the .vscode/.shadowgit-main directory
-      const checkpointsDir = path.join(workspaceRoot, '.vscode', '.shadowgit-main', 'checkpoints');
-      console.log('Looking for checkpoints in:', checkpointsDir);
-      
-      if (!fs.existsSync(checkpointsDir)) {
-        console.log('Checkpoints directory not found');
-        vscode.window.showErrorMessage('Checkpoints directory not found');
-        return;
-      }
-      
-      // Get all checkpoint files
-      const checkpointFiles = fs.readdirSync(checkpointsDir).filter(file => file.endsWith('.json'));
-      console.log('Found checkpoints:', checkpointFiles);
-      
-      if (checkpointFiles.length === 0) {
-        console.log('No checkpoints found');
-        vscode.window.showErrorMessage('No checkpoints found');
-        return;
-      }
-      
-      // Get the first checkpoint ID
-      const checkpointId = checkpointFiles[0].replace('.json', '');
-      console.log('Selected checkpoint for deletion:', checkpointId);
-      
-      // Let user confirm
-      const confirmDelete = await vscode.window.showWarningMessage(
-        `Are you sure you want to delete checkpoint ${checkpointId.substring(0, 8)}?`,
-        { modal: true },
-        'Delete'
-      );
-      
-      if (confirmDelete !== 'Delete') {
-        console.log('Deletion cancelled by user');
-        return;
-      }
-      
-      // Delete the checkpoint file
-      const checkpointPath = path.join(checkpointsDir, `${checkpointId}.json`);
-      fs.unlinkSync(checkpointPath);
-      console.log('Deleted checkpoint file:', checkpointPath);
-      
-      // Show success message
-      vscode.window.showInformationMessage(`Manually deleted checkpoint: ${checkpointId.substring(0, 8)}`);
-      
-      // Refresh everything
-      mainSCMProvider?.update();
-      if (mainTimelineProvider) {
-        mainTimelineProvider.refresh();
-      }
-
-      // Force WebView refresh
-      vscode.commands.executeCommand('shadowGit.refresh');
-    } catch (error) {
-      console.error('Error deleting checkpoint:', error);
-      vscode.window.showErrorMessage(`Manual deletion failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    */
-  });
+  
   
   // Register the Git diff command
   const gitDiffCommand = createGitDiffCommand();
@@ -1253,7 +1287,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register all commands
   context.subscriptions.push(
     testCommand, // Add the test command first
-    testDeleteCommand, // Add the test delete command
     takeSnapshotCommand,
     takeMainSnapshotCommand,
     takeWorkingSnapshotCommand,

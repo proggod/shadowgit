@@ -91,15 +91,33 @@ export class ShadowGit {
   public detectChanges(filePath: string): Change[] {
     const relativePath = path.relative(this.workspaceRoot, filePath);
     
-    console.log("ShadowGit.detectChanges: Detecting changes in ${filePath} (${relativePath})");
+    console.log(`ShadowGit.detectChanges: Detecting changes in ${filePath} (${relativePath})`);
     
     // Check if we have a snapshot
     if (!this.snapshots.has(relativePath)) {
-      console.log("ShadowGit.detectChanges: No snapshot found for ${relativePath}, taking one now");
+      console.log(`ShadowGit.detectChanges: No snapshot found for ${relativePath}, taking one now`);
       try {
+        // Take initial snapshot
         this.takeSnapshot(filePath);
-        // If we're creating the first snapshot, there are no changes to detect yet
-        return [];
+        console.log(`ShadowGit.detectChanges: Successfully took initial snapshot for ${relativePath}`);
+        
+        // Add an initial change - since this is the first time we're tracking this file, 
+        // we should consider it a change from nothing to its current state
+        const initialContent = fs.readFileSync(filePath, 'utf8');
+        const initialChange: Change = {
+          id: 0,
+          type: 'addition',
+          startLine: 0,
+          endLine: initialContent.split('\n').length - 1,
+          content: initialContent,
+          approved: false
+        };
+        
+        const changes = [initialChange];
+        this.changes.set(relativePath, changes);
+        console.log(`ShadowGit.detectChanges: Added initial content change for new file ${relativePath}`);
+        
+        return changes;
       } catch (error) {
         console.error(`ShadowGit.detectChanges: Failed to take initial snapshot of ${relativePath}:`, error);
         return [];
@@ -109,7 +127,7 @@ export class ShadowGit {
     try {
       // Check if file exists
       if (!fs.existsSync(filePath)) {
-        console.log("ShadowGit.detectChanges: File ${filePath} no longer exists");
+        console.log(`ShadowGit.detectChanges: File ${filePath} no longer exists`);
         // File was deleted - consider this a special case
         const snapshot = this.snapshots.get(relativePath)!;
         const deletionChange: Change = {
@@ -138,13 +156,13 @@ export class ShadowGit {
       
       // Quick check - if content is identical, no changes
       if (currentContent === snapshot.content) {
-        console.log("ShadowGit.detectChanges: No changes in ${relativePath}");
+        console.log(`ShadowGit.detectChanges: No changes in ${relativePath}`);
         this.changes.set(relativePath, []);
         this.saveChanges(relativePath, []);
         return [];
       }
       
-      console.log("ShadowGit.detectChanges: Content changed in ${relativePath}, performing diff");
+      console.log(`ShadowGit.detectChanges: Content changed in ${relativePath}, performing diff`);
       
       // Improved line-by-line diff
       const changes: Change[] = [];
@@ -162,7 +180,7 @@ export class ShadowGit {
             endLine++;
           }
           
-          console.log("ShadowGit.detectChanges: Found ${i >= snapshotLines.length ? 'addition' : 'modification'} at lines ${i}-${endLine - 1}");
+          console.log(`ShadowGit.detectChanges: Found ${i >= snapshotLines.length ? 'addition' : 'modification'} at lines ${i}-${endLine - 1}`);
           
           changes.push({
             id: changeId++,
@@ -197,7 +215,7 @@ export class ShadowGit {
           );
           
           if (!isModification) {
-            console.log("ShadowGit.detectChanges: Found deletion at lines ${i}-${endLine - 1}");
+            console.log(`ShadowGit.detectChanges: Found deletion at lines ${i}-${endLine - 1}`);
             
             changes.push({
               id: changeId++,
@@ -219,13 +237,13 @@ export class ShadowGit {
           changes[0].startLine === 0 && 
           changes[0].endLine === currentLines.length - 1 &&
           changes[0].type === 'modification') {
-        console.log("ShadowGit.detectChanges: File ${relativePath} was completely changed");
+        console.log(`ShadowGit.detectChanges: File ${relativePath} was completely changed`);
         // Auto-approve the change since it's a complete file change
         changes[0].approved = true;
       }
       
       // Update and save the changes
-      console.log("ShadowGit.detectChanges: Found ${changes.length} changes in ${relativePath}");
+      console.log(`ShadowGit.detectChanges: Found ${changes.length} changes in ${relativePath}`);
       this.changes.set(relativePath, changes);
       this.saveChanges(relativePath, changes);
       
@@ -329,46 +347,92 @@ export class ShadowGit {
   public createCheckpoint(message: string): Checkpoint {
     console.log(`ShadowGit.createCheckpoint: Creating checkpoint with message "${message}"`);
     
-    // Check all open files for changes first
+    // Force detection of changes in all tracked files
     this.detectChangesInAllTrackedFiles();
     
-    // Get all approved changes
+    // Get a list of all tracked files
+    const trackedFiles = this.getTrackedFiles();
+    console.log(`ShadowGit.createCheckpoint: Current tracked files: ${trackedFiles.length}`);
+    
+    // Initialize change tracking
     const approvedChanges: Record<string, Change[]> = {};
     let totalApprovedChanges = 0;
+    let filesWithChanges = 0;
     
-    console.log("ShadowGit.createCheckpoint: Checking ${this.changes.size} files for approved changes");
-    
-    for (const [relativePath, changes] of this.changes.entries()) {
-      console.log("ShadowGit.createCheckpoint: File ${relativePath} has ${changes.length} changes, checking for approved ones");
+    // Explicitly create changes for ALL tracked files
+    for (const relativePath of trackedFiles) {
+      // Get the full path
+      const filePath = path.join(this.workspaceRoot, relativePath);
       
-      // If there are any unapproved changes, auto-approve all changes in the file
-      let fileApprovedChanges = changes.filter(change => change.approved);
-      
-      // If no changes are approved but we have changes, auto-approve them all
-      if (fileApprovedChanges.length === 0 && changes.length > 0) {
-        console.log("ShadowGit.createCheckpoint: No approved changes found for ${relativePath}, auto-approving all ${changes.length} changes");
+      try {
+        // Make sure the file exists
+        if (!fs.existsSync(filePath)) {
+          console.log(`ShadowGit.createCheckpoint: File ${filePath} no longer exists, skipping`);
+          continue;
+        }
         
-        // Auto-approve all changes for this file
-        changes.forEach(change => {
+        // Check if there are existing changes
+        let changes: Change[] = [];
+        if (this.changes.has(relativePath)) {
+          changes = this.changes.get(relativePath) || [];
+          console.log(`ShadowGit.createCheckpoint: File ${relativePath} already has ${changes.length} existing changes`);
+        } 
+        
+        // If no changes, create a full file change
+        if (changes.length === 0) {
+          console.log(`ShadowGit.createCheckpoint: No changes for ${relativePath}, creating a full file change`);
+          
+          try {
+            // Create a full file change
+            const content = fs.readFileSync(filePath, 'utf8');
+            const lines = content.split('\n');
+            
+            const fullFileChange: Change = {
+              id: 0,
+              type: 'modification',
+              startLine: 0,
+              endLine: lines.length - 1,
+              content: content,
+              approved: true
+            };
+            
+            changes = [fullFileChange];
+            this.changes.set(relativePath, changes);
+            this.saveChanges(relativePath, changes);
+          } catch (error) {
+            console.error(`ShadowGit.createCheckpoint: Failed to create full file change for ${relativePath}:`, error);
+            continue;
+          }
+        }
+        
+        // Ensure all changes are approved
+        for (const change of changes) {
           change.approved = true;
-        });
+        }
         
-        // Update the changes list with approved ones
-        fileApprovedChanges = [...changes];
-        
-        // Save the changes with approved status
+        // Save the updated changes
         this.saveChanges(relativePath, changes);
-      }
-      
-      // Only include files with approved changes
-      if (fileApprovedChanges.length > 0) {
-        console.log("ShadowGit.createCheckpoint: Adding ${fileApprovedChanges.length} approved changes for ${relativePath} to checkpoint");
-        approvedChanges[relativePath] = fileApprovedChanges;
-        totalApprovedChanges += fileApprovedChanges.length;
+        
+        // Add to the approvedChanges record for the checkpoint
+        approvedChanges[relativePath] = changes.map(change => ({
+          id: change.id,
+          type: change.type,
+          startLine: change.startLine,
+          endLine: change.endLine,
+          content: change.content,
+          approved: true
+        }));
+        
+        // Update counts
+        totalApprovedChanges += changes.length;
+        filesWithChanges++;
+        
+      } catch (error) {
+        console.error(`ShadowGit.createCheckpoint: Error processing ${relativePath}:`, error);
       }
     }
     
-    console.log("ShadowGit.createCheckpoint: Total approved changes: ${totalApprovedChanges} across ${Object.keys(approvedChanges).length} files");
+    console.log(`ShadowGit.createCheckpoint: Prepared ${totalApprovedChanges} approved changes across ${filesWithChanges} files`);
     
     // Create the checkpoint
     const checkpoint: Checkpoint = {
@@ -379,18 +443,16 @@ export class ShadowGit {
       type: this.type
     };
     
-    // Save the checkpoint
+    // Add the checkpoint to the list and save
     this.checkpoints.push(checkpoint);
     this.saveCheckpoint(checkpoint);
     
-    console.log("ShadowGit.createCheckpoint: Created checkpoint ${checkpoint.id} with ${Object.keys(approvedChanges).length} files");
+    console.log(`ShadowGit.createCheckpoint: Created checkpoint ${checkpoint.id} with ${Object.keys(approvedChanges).length} files`);
     
-    // Remove approved changes from pending changes
-    for (const [relativePath, changes] of this.changes.entries()) {
-      const remainingChanges = changes.filter(change => !change.approved);
-      console.log("ShadowGit.createCheckpoint: Removing ${changes.length - remainingChanges.length} approved changes from ${relativePath}");
-      this.changes.set(relativePath, remainingChanges);
-      this.saveChanges(relativePath, remainingChanges);
+    // Clear all changes since they've been added to the checkpoint
+    for (const relativePath of trackedFiles) {
+      this.changes.set(relativePath, []);
+      this.saveChanges(relativePath, []);
     }
     
     return checkpoint;
@@ -400,23 +462,44 @@ export class ShadowGit {
    * Detect changes in all tracked files
    */
   private detectChangesInAllTrackedFiles(): void {
-    console.log("ShadowGit.detectChangesInAllTrackedFiles: Detecting changes in all ${this.snapshots.size} tracked files");
+    console.log(`ShadowGit.detectChangesInAllTrackedFiles: Detecting changes in all ${this.snapshots.size} tracked files`);
+    
+    // Log what files have changes before detection
+    const filesWithChangesBeforeCount = this.changes.size;
+    console.log(`ShadowGit.detectChangesInAllTrackedFiles: Files with changes before detection: ${filesWithChangesBeforeCount}`);
+    if (filesWithChangesBeforeCount > 0) {
+      console.log(`ShadowGit.detectChangesInAllTrackedFiles: Files with changes: ${Array.from(this.changes.keys()).join(', ')}`);
+    }
     
     // Iterate through all snapshots and detect changes
+    let processedFiles = 0;
+    
     for (const [relativePath, snapshot] of this.snapshots.entries()) {
       try {
         const filePath = path.join(this.workspaceRoot, relativePath);
         
         // Check if file exists
         if (fs.existsSync(filePath)) {
-          console.log("ShadowGit.detectChangesInAllTrackedFiles: Detecting changes in ${filePath}");
-          this.detectChanges(filePath);
+          console.log(`ShadowGit.detectChangesInAllTrackedFiles: Detecting changes in ${filePath}`);
+          const changes = this.detectChanges(filePath);
+          if (changes.length > 0) {
+            console.log(`ShadowGit.detectChangesInAllTrackedFiles: Found ${changes.length} changes in ${filePath}`);
+          }
+          processedFiles++;
         } else {
-          console.log("ShadowGit.detectChangesInAllTrackedFiles: File ${filePath} no longer exists, skipping");
+          console.log(`ShadowGit.detectChangesInAllTrackedFiles: File ${filePath} no longer exists, skipping`);
         }
       } catch (error) {
         console.error(`ShadowGit.detectChangesInAllTrackedFiles: Error detecting changes for ${relativePath}:`, error);
       }
+    }
+    
+    // Log what files have changes after detection
+    const filesWithChangesAfterCount = this.changes.size;
+    console.log(`ShadowGit.detectChangesInAllTrackedFiles: Processed ${processedFiles} files`);
+    console.log(`ShadowGit.detectChangesInAllTrackedFiles: Files with changes after detection: ${filesWithChangesAfterCount}`);
+    if (filesWithChangesAfterCount > 0) {
+      console.log(`ShadowGit.detectChangesInAllTrackedFiles: Files with changes: ${Array.from(this.changes.keys()).join(', ')}`);
     }
   }
 
@@ -425,7 +508,7 @@ export class ShadowGit {
    * @param checkpointId - ID of the checkpoint to apply
    */
   public applyCheckpoint(checkpointId: string): void {
-    console.log("ShadowGit.applyCheckpoint: Starting to apply checkpoint ${checkpointId}");
+    console.log(`ShadowGit.applyCheckpoint: Starting to apply checkpoint ${checkpointId}`);
     
     const checkpoint = this.checkpoints.find(cp => cp.id === checkpointId);
     if (!checkpoint) {
@@ -442,7 +525,7 @@ export class ShadowGit {
     for (const [relativePath, changes] of Object.entries(checkpoint.changes)) {
       const filePath = path.join(this.workspaceRoot, relativePath);
       
-      console.log("ShadowGit.applyCheckpoint: Processing file ${relativePath} with ${changes.length} changes");
+      console.log(`ShadowGit.applyCheckpoint: Processing file ${relativePath} with ${changes.length} changes`);
       
       try {
         // Find a snapshot for this file
@@ -455,7 +538,7 @@ export class ShadowGit {
         }
         
         // Instead of trying to apply changes, just write the state at checkpoint time
-        console.log("ShadowGit.applyCheckpoint: Restoring ${filePath} to state at checkpoint time");
+        console.log(`ShadowGit.applyCheckpoint: Restoring ${filePath} to state at checkpoint time`);
         
         // Get the file content at checkpoint time by working backwards from the changes
         const checkpointContent = this.getFileContentAtCheckpoint(relativePath, snapshot, changes);
@@ -463,26 +546,26 @@ export class ShadowGit {
         // Check if file exists and create directory if needed
         const fileDir = path.dirname(filePath);
         if (!fs.existsSync(fileDir)) {
-          console.log("ShadowGit.applyCheckpoint: Creating directory ${fileDir}");
+          console.log(`ShadowGit.applyCheckpoint: Creating directory ${fileDir}`);
           fs.mkdirSync(fileDir, { recursive: true });
         }
         
         // Write the content back to the file
-        console.log("ShadowGit.applyCheckpoint: Writing ${checkpointContent.length} bytes to ${filePath}");
+        console.log(`ShadowGit.applyCheckpoint: Writing ${checkpointContent.length} bytes to ${filePath}`);
         fs.writeFileSync(filePath, checkpointContent);
         
         // Update the snapshot after applying changes
-        console.log("ShadowGit.applyCheckpoint: Taking new snapshot of ${filePath}");
+        console.log(`ShadowGit.applyCheckpoint: Taking new snapshot of ${filePath}`);
         this.takeSnapshot(filePath);
         
         restoredFiles.push(relativePath);
-        console.log("ShadowGit.applyCheckpoint: Successfully restored ${filePath}");
+        console.log(`ShadowGit.applyCheckpoint: Successfully restored ${filePath}`);
       } catch (error) {
         console.error(`ShadowGit.applyCheckpoint: Failed to apply checkpoint to ${filePath}:`, error);
       }
     }
     
-    console.log("ShadowGit.applyCheckpoint: Completed restore of checkpoint ${checkpointId}, restored ${restoredFiles.length} files: ${restoredFiles.join(', ')}");
+    console.log(`ShadowGit.applyCheckpoint: Completed restore of checkpoint ${checkpointId}, restored ${restoredFiles.length} files: ${restoredFiles.join(', ')}`);
   }
   
   /**
@@ -518,14 +601,14 @@ export class ShadowGit {
    * @returns The content of the file at checkpoint time
    */
   private getFileContentAtCheckpoint(relativePath: string, snapshot: Snapshot, changes: Change[]): string {
-    console.log("ShadowGit.getFileContentAtCheckpoint: Reconstructing content for ${relativePath} at checkpoint time");
+    console.log(`ShadowGit.getFileContentAtCheckpoint: Reconstructing content for ${relativePath} at checkpoint time`);
     
     // Start with the snapshot content
     const contentLines = [...snapshot.lines];
     
     // Apply the changes in order
     for (const change of changes) {
-      console.log("ShadowGit.getFileContentAtCheckpoint: Applying ${change.type} at lines ${change.startLine}-${change.endLine}");
+      console.log(`ShadowGit.getFileContentAtCheckpoint: Applying ${change.type} at lines ${change.startLine}-${change.endLine}`);
       
       if (change.type === 'addition' || change.type === 'modification') {
         const changeLines = change.content.split('\n');
@@ -537,7 +620,7 @@ export class ShadowGit {
     
     // Join the lines and return the content
     const content = contentLines.join('\n');
-    console.log("ShadowGit.getFileContentAtCheckpoint: Reconstructed ${content.length} bytes of content");
+    console.log(`ShadowGit.getFileContentAtCheckpoint: Reconstructed ${content.length} bytes of content`);
     return content;
   }
 
@@ -654,8 +737,44 @@ export class ShadowGit {
    */
   private saveCheckpoint(checkpoint: Checkpoint): void {
     try {
+      // First check if the checkpoint has any files
+      const fileCount = Object.keys(checkpoint.changes).length;
+      console.log(`ShadowGit.saveCheckpoint: Saving checkpoint ${checkpoint.id} with ${fileCount} files`);
+      
+      // If no files, add in all current changes for debugging
+      if (fileCount === 0) {
+        console.log(`ShadowGit.saveCheckpoint: WARNING - No files in checkpoint! Adding all current changes for debugging`);
+        
+        // Add all detected changes to the checkpoint - properly create deep copies
+        for (const [relativePath, changes] of this.changes.entries()) {
+          if (changes.length > 0) {
+            console.log(`ShadowGit.saveCheckpoint: Force adding file ${relativePath} with ${changes.length} changes to checkpoint`);
+            
+            // Create proper deep copies of each change object
+            checkpoint.changes[relativePath] = changes.map(change => ({
+              id: change.id,
+              type: change.type,
+              startLine: change.startLine,
+              endLine: change.endLine,
+              content: change.content,
+              approved: true // Force all changes to be approved
+            }));
+          }
+        }
+      }
+      
+      // Double-check
+      const updatedFileCount = Object.keys(checkpoint.changes).length;
+      console.log(`ShadowGit.saveCheckpoint: Saving checkpoint with ${updatedFileCount} files`);
+      
+      // Log some details of what we're saving
+      for (const [relativePath, changes] of Object.entries(checkpoint.changes)) {
+        console.log(`ShadowGit.saveCheckpoint: File ${relativePath} has ${changes.length} changes in checkpoint`);
+      }
+      
       const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpoint.id}.json`);
       fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2));
+      console.log(`ShadowGit.saveCheckpoint: Successfully saved checkpoint to ${checkpointPath}`);
     } catch (error) {
       console.error(`Failed to save checkpoint ${checkpoint.id}:`, error);
     }
@@ -683,7 +802,7 @@ export class ShadowGit {
    * @returns Whether the operation was successful
    */
   public deleteCheckpoint(checkpointId: string): boolean {
-    console.log("ShadowGit.deleteCheckpoint: Deleting checkpoint ${checkpointId}");
+    console.log(`ShadowGit.deleteCheckpoint: Deleting checkpoint ${checkpointId}`);
     
     // Find the checkpoint index
     const checkpointIndex = this.checkpoints.findIndex(cp => cp.id === checkpointId);
@@ -701,12 +820,12 @@ export class ShadowGit {
       const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpointId}.json`);
       if (fs.existsSync(checkpointPath)) {
         fs.unlinkSync(checkpointPath);
-        console.log("ShadowGit.deleteCheckpoint: Deleted checkpoint file ${checkpointPath}");
+        console.log(`ShadowGit.deleteCheckpoint: Deleted checkpoint file ${checkpointPath}`);
       } else {
         console.warn(`ShadowGit.deleteCheckpoint: Checkpoint file ${checkpointPath} not found on disk`);
       }
       
-      console.log("ShadowGit.deleteCheckpoint: Successfully deleted checkpoint ${checkpointId}");
+      console.log(`ShadowGit.deleteCheckpoint: Successfully deleted checkpoint ${checkpointId}`);
       return true;
     } catch (error) {
       console.error(`ShadowGit.deleteCheckpoint: Failed to delete checkpoint ${checkpointId}:`, error);
