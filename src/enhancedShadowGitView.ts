@@ -15,6 +15,8 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
   private readonly mainShadowGit: ShadowGit;
   private readonly workingShadowGit: ShadowGitWithGit;
   private _view?: vscode.WebviewView;
+  private _openCheckpoints: Set<string> = new Set(); // Track which checkpoints have open file lists
+  private _checkpointScrollPositions: Map<string, number> = new Map(); // Track scroll positions
   
   /**
    * Creates a new EnhancedShadowGitViewProvider instance
@@ -53,6 +55,16 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       console.log('Received message from WebView:', message);
       
       switch (message.command) {
+        case 'checkpointOpened':
+          this._openCheckpoints.add(message.checkpointId);
+          break;
+        case 'checkpointClosed':
+          this._openCheckpoints.delete(message.checkpointId);
+          this._checkpointScrollPositions.delete(message.checkpointId);
+          break;
+        case 'checkpointScroll':
+          this._checkpointScrollPositions.set(message.checkpointId, message.scrollTop);
+          break;
         case 'takeSnapshot':
           if (message.type === 'main') {
             vscode.commands.executeCommand('shadowGit.takeMainSnapshot')
@@ -65,6 +77,14 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         case 'openDiff':
           this.openDiff(message.path, message.type);
           break;
+        case 'startCheckpointProcess':
+          this.startCheckpointProcess();
+          break;
+          
+        case 'createCheckpointWithMessage':
+          this.createCheckpointWithMessage(message.message);
+          break;
+          
         case 'createCheckpoint':
           if (message.type === 'main') {
             // Using then() to refresh the view after checkpoint creation
@@ -139,21 +159,33 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       }
     });
     
-    // Setup regular auto-refresh while visible
-    const refreshInterval = setInterval(() => {
+    // Setup smart refresh that only updates when data changes
+    const refreshInterval = setInterval(async () => {
       if (this._view && this._view.visible) {
-        console.log('Auto-refreshing Shadow Git view');
-        this.refresh();
+        // Check for changes without rebuilding UI
+        await this.checkForChanges();
       }
-    }, 5000); // Refresh every 5 seconds while visible
+    }, 5000); // Check for changes every 5 seconds while visible
     
     // Clear interval when the webview is disposed
     webviewView.onDidDispose(() => {
       clearInterval(refreshInterval);
     });
     
-    // Initial update
-    this.refresh();
+    // Initial update and store initial state
+    this.refresh().then(() => {
+      // Store initial state hashes to prevent unnecessary refreshes
+      this._lastMainFilesHash = JSON.stringify(this.getFilesWithChanges().sort());
+      this._lastMainCheckpointsHash = JSON.stringify(this.mainShadowGit.getCheckpoints().map(cp => ({
+        id: cp.id,
+        message: cp.message,
+        timestamp: cp.timestamp,
+        changesCount: Object.keys(cp.changes).length
+      })));
+      this.getGitChangedFiles().then(gitFiles => {
+        this._lastWorkingFilesHash = JSON.stringify(gitFiles.sort());
+      });
+    });
   }
   
   /**
@@ -317,13 +349,17 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         .checkpoint-files-list {
           margin-top: 8px;
           margin-bottom: 8px;
-          max-height: 150px;
+          max-height: 200px;
           overflow-y: auto;
+          overflow-x: hidden;
           background-color: var(--vscode-editor-background);
           border: 1px solid var(--vscode-panel-border);
-          border-radius: 2px;
-          padding: 8px;
+          border-radius: 4px;
+          padding: 12px;
           display: none;
+          position: relative;
+          z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
         
         .checkpoint-files-list ul {
@@ -339,8 +375,34 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         
         .files-header {
           font-weight: bold;
-          margin-bottom: 4px;
           font-size: 0.9em;
+        }
+        
+        .files-list-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+          padding-bottom: 4px;
+          border-bottom: 1px solid var(--vscode-panel-border);
+        }
+        
+        .close-btn {
+          background: none;
+          border: none;
+          color: var(--vscode-foreground);
+          font-size: 20px;
+          cursor: pointer;
+          padding: 0;
+          width: 20px;
+          height: 20px;
+          line-height: 18px;
+          text-align: center;
+          border-radius: 3px;
+        }
+        
+        .close-btn:hover {
+          background-color: var(--vscode-toolbar-hoverBackground);
         }
         
         .empty-message {
@@ -492,6 +554,90 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         .git-type-index .stage-btn {
           display: none;
         }
+        
+        /* Dialog overlay styles */
+        .overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.7);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        }
+        
+        .dialog {
+          background-color: var(--vscode-editor-background);
+          border: 1px solid var(--vscode-panel-border);
+          border-radius: 8px;
+          padding: 20px;
+          min-width: 400px;
+          max-width: 500px;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+        
+        .dialog h3 {
+          margin-top: 0;
+          margin-bottom: 16px;
+        }
+        
+        .status-message {
+          margin: 16px 0;
+          text-align: center;
+          font-size: 14px;
+        }
+        
+        .status-message i {
+          font-size: 20px;
+          margin-bottom: 8px;
+          display: block;
+        }
+        
+        .dialog input[type="text"] {
+          width: 100%;
+          padding: 8px;
+          margin: 8px 0;
+          background-color: var(--vscode-input-background);
+          color: var(--vscode-input-foreground);
+          border: 1px solid var(--vscode-input-border);
+          border-radius: 2px;
+        }
+        
+        .dialog-buttons {
+          display: flex;
+          gap: 10px;
+          justify-content: flex-end;
+          margin-top: 16px;
+        }
+        
+        .dialog button {
+          min-width: 80px;
+        }
+        
+        .success-message {
+          text-align: center;
+          color: var(--vscode-testing-iconPassed);
+          margin: 16px 0;
+        }
+        
+        .success-message i {
+          font-size: 24px;
+          margin-bottom: 8px;
+          display: block;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        .codicon-modifier-spin {
+          animation: spin 1s linear infinite;
+          display: inline-block;
+        }
       </style>
     </head>
     <body>
@@ -559,6 +705,32 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         </div>
       </div>
       
+      <!-- Checkpoint Dialog Overlay -->
+      <div id="checkpointDialog" class="overlay" style="display: none;">
+        <div class="dialog">
+          <h3>Create Checkpoint</h3>
+          <div id="checkpointStatus" class="status-message">
+            <i class="codicon codicon-loading codicon-modifier-spin"></i>
+            <span id="statusText">Scanning workspace files...</span>
+          </div>
+          <div id="checkpointInput" style="display: none;">
+            <p>Enter a message for this checkpoint:</p>
+            <input type="text" id="checkpointMessage" placeholder="Describe what changes this checkpoint includes..." />
+            <div class="dialog-buttons">
+              <button id="createCheckpointBtn" class="primary">Create Checkpoint</button>
+              <button id="cancelCheckpointBtn">Cancel</button>
+            </div>
+          </div>
+          <div id="checkpointResult" style="display: none;">
+            <div class="success-message">
+              <i class="codicon codicon-check"></i>
+              <span id="resultText"></span>
+            </div>
+            <button id="closeDialogBtn">Close</button>
+          </div>
+        </div>
+      </div>
+      
       <script>
         // Get vscode API
         const vscode = acquireVsCodeApi();
@@ -606,8 +778,52 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           vscode.postMessage({ command: 'takeSnapshot', type: 'main' });
         });
         
+        // Dialog elements
+        const checkpointDialog = document.getElementById('checkpointDialog');
+        const statusText = document.getElementById('statusText');
+        const checkpointStatus = document.getElementById('checkpointStatus');
+        const checkpointInput = document.getElementById('checkpointInput');
+        const checkpointResult = document.getElementById('checkpointResult');
+        const checkpointMessage = document.getElementById('checkpointMessage');
+        const createCheckpointBtn = document.getElementById('createCheckpointBtn');
+        const cancelCheckpointBtn = document.getElementById('cancelCheckpointBtn');
+        const closeDialogBtn = document.getElementById('closeDialogBtn');
+        const resultText = document.getElementById('resultText');
+        
         createMainCheckpointBtn.addEventListener('click', () => {
-          vscode.postMessage({ command: 'createCheckpoint', type: 'main' });
+          // Show dialog with status
+          checkpointDialog.style.display = 'flex';
+          checkpointStatus.style.display = 'block';
+          checkpointInput.style.display = 'none';
+          checkpointResult.style.display = 'none';
+          statusText.textContent = 'Scanning workspace files...';
+          
+          // Request to start checkpoint process
+          vscode.postMessage({ command: 'startCheckpointProcess', type: 'main' });
+        });
+        
+        createCheckpointBtn.addEventListener('click', () => {
+          const message = checkpointMessage.value.trim();
+          if (message) {
+            checkpointStatus.style.display = 'block';
+            checkpointInput.style.display = 'none';
+            statusText.textContent = 'Creating checkpoint...';
+            vscode.postMessage({ 
+              command: 'createCheckpointWithMessage', 
+              type: 'main',
+              message: message
+            });
+          }
+        });
+        
+        cancelCheckpointBtn.addEventListener('click', () => {
+          checkpointDialog.style.display = 'none';
+          checkpointMessage.value = '';
+        });
+        
+        closeDialogBtn.addEventListener('click', () => {
+          checkpointDialog.style.display = 'none';
+          checkpointMessage.value = '';
         });
         
         refreshMainBtn.addEventListener('click', () => {
@@ -619,12 +835,24 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           vscode.postMessage({ command: 'refresh' });
         });
         
+        // Track which checkpoints have open file lists and their scroll positions
+        let openCheckpoints = new Set();
+        let scrollPositions = new Map();
+        
         // Handle messages from the extension
         window.addEventListener('message', event => {
           const message = event.data;
           
           switch (message.command) {
             case 'update':
+              // Update the set of open checkpoints if provided
+              if (message.openCheckpoints) {
+                openCheckpoints = new Set(message.openCheckpoints);
+              }
+              // Update scroll positions if provided
+              if (message.checkpointScrollPositions) {
+                scrollPositions = new Map(message.checkpointScrollPositions);
+              }
               updateMainUI(message.mainFiles, message.mainCheckpoints);
               updateWorkingUI(
                 message.workingFiles, 
@@ -634,6 +862,41 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
                 message.gitType,
                 message.gitUriMap
               );
+              break;
+            
+            case 'checkpointProgress':
+              // Update status during checkpoint process
+              statusText.textContent = message.text;
+              break;
+              
+            case 'checkpointReady':
+              // Show input for checkpoint message
+              checkpointStatus.style.display = 'none';
+              checkpointInput.style.display = 'block';
+              checkpointMessage.focus();
+              break;
+              
+            case 'checkpointCreated':
+              // Show success message
+              checkpointInput.style.display = 'none';
+              checkpointResult.style.display = 'block';
+              resultText.textContent = message.text;
+              
+              // Auto-close after 3 seconds
+              setTimeout(() => {
+                checkpointDialog.style.display = 'none';
+                checkpointMessage.value = '';
+              }, 3000);
+              break;
+              
+            case 'checkpointError':
+              // Show error
+              statusText.textContent = 'Error: ' + message.text;
+              statusText.style.color = 'var(--vscode-errorForeground)';
+              setTimeout(() => {
+                checkpointDialog.style.display = 'none';
+                statusText.style.color = '';
+              }, 3000);
               break;
           }
         });
@@ -718,7 +981,8 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
               \`;
               
               // View files button
-              checkpointItem.querySelector('.view-files-btn').addEventListener('click', () => {
+              checkpointItem.querySelector('.view-files-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
                 const filesInCheckpoint = Object.keys(checkpoint.changes);
                 
                 // Create or update files list element
@@ -732,24 +996,68 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
                 // Toggle visibility
                 if (filesList.style.display === 'block') {
                   filesList.style.display = 'none';
-                } else {
-                  if (filesInCheckpoint.length === 0) {
-                    filesList.innerHTML = '<div class="empty-message">No files in this checkpoint</div>';
-                  } else {
-                    filesList.innerHTML = '<div class="files-header">Files in this checkpoint:</div>';
-                    
-                    const fileItems = document.createElement('ul');
-                    filesInCheckpoint.forEach(file => {
-                      const item = document.createElement('li');
-                      item.textContent = file;
-                      fileItems.appendChild(item);
-                    });
-                    
-                    filesList.appendChild(fileItems);
-                  }
-                  
-                  filesList.style.display = 'block';
+                  openCheckpoints.delete(checkpoint.id);
+                  vscode.postMessage({
+                    command: 'checkpointClosed',
+                    checkpointId: checkpoint.id
+                  });
+                  return;
                 }
+                
+                // Clear content and create header with close button
+                filesList.innerHTML = '';
+                
+                // Create header with close button
+                const header = document.createElement('div');
+                header.className = 'files-list-header';
+                header.innerHTML = \`
+                  <span class="files-header">Files in this checkpoint:</span>
+                  <button class="close-btn" title="Close">×</button>
+                \`;
+                filesList.appendChild(header);
+                
+                // Add close button handler
+                header.querySelector('.close-btn').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  filesList.style.display = 'none';
+                  openCheckpoints.delete(checkpoint.id);
+                  vscode.postMessage({
+                    command: 'checkpointClosed',
+                    checkpointId: checkpoint.id
+                  });
+                });
+                
+                if (filesInCheckpoint.length === 0) {
+                  const emptyMsg = document.createElement('div');
+                  emptyMsg.className = 'empty-message';
+                  emptyMsg.textContent = 'No files in this checkpoint';
+                  filesList.appendChild(emptyMsg);
+                } else {
+                  const fileItems = document.createElement('ul');
+                  filesInCheckpoint.forEach(file => {
+                    const item = document.createElement('li');
+                    item.textContent = file;
+                    fileItems.appendChild(item);
+                  });
+                  
+                  filesList.appendChild(fileItems);
+                }
+                
+                filesList.style.display = 'block';
+                openCheckpoints.add(checkpoint.id);
+                vscode.postMessage({
+                  command: 'checkpointOpened',
+                  checkpointId: checkpoint.id
+                });
+                
+                // Track scroll events on the file list
+                filesList.addEventListener('scroll', (e) => {
+                  vscode.postMessage({
+                    command: 'checkpointScroll',
+                    checkpointId: checkpoint.id,
+                    scrollTop: e.target.scrollTop
+                  });
+                });
               });
               
               // Restore checkpoint button
@@ -761,26 +1069,98 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
               });
               
               // Delete checkpoint button
-              checkpointItem.querySelector('.delete-btn').addEventListener('click', () => {
+              checkpointItem.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                
                 console.log("Delete button clicked for checkpoint " + checkpoint.id);
+                
+                // Provide visual feedback
+                const button = e.target.closest('button');
+                button.innerHTML = '<i class="codicon codicon-loading codicon-modifier-spin"></i> Deleting...';
+                button.disabled = true;
+                
+                // Disable all buttons in the checkpoint item
+                checkpointItem.querySelectorAll('button').forEach(btn => {
+                  btn.disabled = true;
+                });
+                
                 vscode.postMessage({
                   command: 'deleteCheckpoint',
                   id: checkpoint.id
                 });
-                
-                // Log for debugging
-                try {
-                  // This will show up in the JS console of the webview
-                  console.log('Delete message sent:', {
-                    command: 'deleteCheckpoint',
-                    id: checkpoint.id
-                  });
-                } catch (error) {
-                  console.error('Error logging:', error);
-                }
               });
               
               mainCheckpointsList.appendChild(checkpointItem);
+              
+              // Restore open state if this checkpoint was previously open
+              if (openCheckpoints.has(checkpoint.id)) {
+                // Don't simulate click - directly recreate the open state
+                const filesInCheckpoint = Object.keys(checkpoint.changes);
+                
+                // Create files list element
+                const filesList = document.createElement('div');
+                filesList.className = 'checkpoint-files-list';
+                checkpointItem.appendChild(filesList);
+                
+                // Create header with close button
+                const header = document.createElement('div');
+                header.className = 'files-list-header';
+                header.innerHTML = \`
+                  <span class="files-header">Files in this checkpoint:</span>
+                  <button class="close-btn" title="Close">×</button>
+                \`;
+                filesList.appendChild(header);
+                
+                // Add close button handler
+                header.querySelector('.close-btn').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  filesList.style.display = 'none';
+                  openCheckpoints.delete(checkpoint.id);
+                  scrollPositions.delete(checkpoint.id);
+                  vscode.postMessage({
+                    command: 'checkpointClosed',
+                    checkpointId: checkpoint.id
+                  });
+                });
+                
+                if (filesInCheckpoint.length === 0) {
+                  const emptyMsg = document.createElement('div');
+                  emptyMsg.className = 'empty-message';
+                  emptyMsg.textContent = 'No files in this checkpoint';
+                  filesList.appendChild(emptyMsg);
+                } else {
+                  const fileItems = document.createElement('ul');
+                  filesInCheckpoint.forEach(file => {
+                    const item = document.createElement('li');
+                    item.textContent = file;
+                    fileItems.appendChild(item);
+                  });
+                  
+                  filesList.appendChild(fileItems);
+                }
+                
+                filesList.style.display = 'block';
+                
+                // Track scroll events
+                filesList.addEventListener('scroll', (e) => {
+                  scrollPositions.set(checkpoint.id, e.target.scrollTop);
+                  vscode.postMessage({
+                    command: 'checkpointScroll',
+                    checkpointId: checkpoint.id,
+                    scrollTop: e.target.scrollTop
+                  });
+                });
+                
+                // Restore scroll position
+                const savedScrollTop = scrollPositions.get(checkpoint.id);
+                if (savedScrollTop !== undefined) {
+                  // Use setTimeout to ensure DOM is ready
+                  setTimeout(() => {
+                    filesList.scrollTop = savedScrollTop;
+                  }, 0);
+                }
+              }
             });
           }
         }
@@ -919,7 +1299,8 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
               \`;
               
               // View files button
-              checkpointItem.querySelector('.view-files-btn').addEventListener('click', () => {
+              checkpointItem.querySelector('.view-files-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
                 const filesInCheckpoint = Object.keys(checkpoint.changes);
                 
                 // Create or update files list element
@@ -933,24 +1314,68 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
                 // Toggle visibility
                 if (filesList.style.display === 'block') {
                   filesList.style.display = 'none';
-                } else {
-                  if (filesInCheckpoint.length === 0) {
-                    filesList.innerHTML = '<div class="empty-message">No files in this checkpoint</div>';
-                  } else {
-                    filesList.innerHTML = '<div class="files-header">Files in this checkpoint:</div>';
-                    
-                    const fileItems = document.createElement('ul');
-                    filesInCheckpoint.forEach(file => {
-                      const item = document.createElement('li');
-                      item.textContent = file;
-                      fileItems.appendChild(item);
-                    });
-                    
-                    filesList.appendChild(fileItems);
-                  }
-                  
-                  filesList.style.display = 'block';
+                  openCheckpoints.delete(checkpoint.id);
+                  vscode.postMessage({
+                    command: 'checkpointClosed',
+                    checkpointId: checkpoint.id
+                  });
+                  return;
                 }
+                
+                // Clear content and create header with close button
+                filesList.innerHTML = '';
+                
+                // Create header with close button
+                const header = document.createElement('div');
+                header.className = 'files-list-header';
+                header.innerHTML = \`
+                  <span class="files-header">Files in this checkpoint:</span>
+                  <button class="close-btn" title="Close">×</button>
+                \`;
+                filesList.appendChild(header);
+                
+                // Add close button handler
+                header.querySelector('.close-btn').addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  filesList.style.display = 'none';
+                  openCheckpoints.delete(checkpoint.id);
+                  vscode.postMessage({
+                    command: 'checkpointClosed',
+                    checkpointId: checkpoint.id
+                  });
+                });
+                
+                if (filesInCheckpoint.length === 0) {
+                  const emptyMsg = document.createElement('div');
+                  emptyMsg.className = 'empty-message';
+                  emptyMsg.textContent = 'No files in this checkpoint';
+                  filesList.appendChild(emptyMsg);
+                } else {
+                  const fileItems = document.createElement('ul');
+                  filesInCheckpoint.forEach(file => {
+                    const item = document.createElement('li');
+                    item.textContent = file;
+                    fileItems.appendChild(item);
+                  });
+                  
+                  filesList.appendChild(fileItems);
+                }
+                
+                filesList.style.display = 'block';
+                openCheckpoints.add(checkpoint.id);
+                vscode.postMessage({
+                  command: 'checkpointOpened',
+                  checkpointId: checkpoint.id
+                });
+                
+                // Track scroll events on the file list
+                filesList.addEventListener('scroll', (e) => {
+                  vscode.postMessage({
+                    command: 'checkpointScroll',
+                    checkpointId: checkpoint.id,
+                    scrollTop: e.target.scrollTop
+                  });
+                });
               });
               
               // Restore checkpoint button
@@ -972,23 +1397,26 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
               }
               
               // Delete checkpoint button
-              checkpointItem.querySelector('.delete-btn').addEventListener('click', () => {
+              checkpointItem.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                
                 console.log("Delete button clicked for checkpoint " + checkpoint.id);
+                
+                // Provide visual feedback
+                const button = e.target.closest('button');
+                button.innerHTML = '<i class="codicon codicon-loading codicon-modifier-spin"></i> Deleting...';
+                button.disabled = true;
+                
+                // Disable all buttons in the checkpoint item
+                checkpointItem.querySelectorAll('button').forEach(btn => {
+                  btn.disabled = true;
+                });
+                
                 vscode.postMessage({
                   command: 'deleteCheckpoint',
                   id: checkpoint.id
                 });
-                
-                // Log for debugging
-                try {
-                  // This will show up in the JS console of the webview
-                  console.log('Delete message sent:', {
-                    command: 'deleteCheckpoint',
-                    id: checkpoint.id
-                  });
-                } catch (error) {
-                  console.error('Error logging:', error);
-                }
               });
               
               workingCheckpointsList.appendChild(checkpointItem);
@@ -996,64 +1424,90 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           }
         }
         
-        // Add direct event delegation for checkpoint actions
-        document.addEventListener('click', (event) => {
-          // Find closest button if any
-          const button = event.target.closest('button');
-          if (!button) return;
-          
-          // Handle delete buttons directly
-          if (button.classList.contains('delete-btn')) {
-            // Find the parent checkpoint item
-            const checkpointItem = button.closest('.checkpoint-item');
-            if (checkpointItem) {
-              // Extract checkpoint ID from the header
-              const idElement = checkpointItem.querySelector('.checkpoint-id');
-              if (idElement && idElement.textContent) {
-                const checkpointId = idElement.textContent.trim();
-                console.log("Delete button clicked directly for " + checkpointId);
-                
-                // Find a more reliable way to get the checkpoint ID if possible
-                const dataId = checkpointItem.getAttribute('data-checkpoint-id');
-                const finalId = dataId || checkpointId;
-                
-                console.log("Using checkpoint ID: " + finalId);
-                
-                // Send message to extension
-                vscode.postMessage({
-                  command: 'deleteCheckpoint',
-                  id: finalId
-                });
-                
-                // Prevent the event from going to other handlers
-                event.preventDefault();
-                event.stopPropagation();
-                
-                // Provide visual feedback
-                button.innerHTML = '<i class="codicon codicon-loading codicon-modifier-spin"></i> Deleting...';
-                button.disabled = true;
-                
-                // Disable all buttons in the checkpoint item
-                checkpointItem.querySelectorAll('button').forEach(btn => {
-                  if (btn !== button) {
-                    btn.disabled = true;
-                  }
-                });
-                
-                // Immediately refresh
-                setTimeout(() => {
-                  vscode.postMessage({ command: 'refresh' });
-                }, 500);
-              }
-            }
-          }
-        });
         
         // Initial refresh request
         vscode.postMessage({ command: 'refresh' });
       </script>
     </body>
     </html>`;
+  }
+  
+  /**
+   * Check for changes and update only if data has changed
+   */
+  private async checkForChanges(): Promise<void> {
+    if (!this._view) {
+      return;
+    }
+    
+    try {
+      // Get current data
+      const filesWithChanges = this.getFilesWithChanges();
+      const mainCheckpoints = this.mainShadowGit.getCheckpoints();
+      const gitFiles = await this.getGitChangedFiles();
+      
+      // Create simple hashes to compare data
+      const mainFilesHash = JSON.stringify(filesWithChanges.sort());
+      const mainCheckpointsHash = JSON.stringify(mainCheckpoints.map(cp => ({
+        id: cp.id,
+        message: cp.message,
+        timestamp: cp.timestamp,
+        changesCount: Object.keys(cp.changes).length
+      })));
+      const workingFilesHash = JSON.stringify(gitFiles.sort());
+      
+      // Compare with last known state
+      if (mainFilesHash !== this._lastMainFilesHash || 
+          mainCheckpointsHash !== this._lastMainCheckpointsHash ||
+          workingFilesHash !== this._lastWorkingFilesHash) {
+        
+        // Data has changed, update the UI
+        this._lastMainFilesHash = mainFilesHash;
+        this._lastMainCheckpointsHash = mainCheckpointsHash;  
+        this._lastWorkingFilesHash = workingFilesHash;
+        
+        await this.refresh();
+      }
+    } catch (error) {
+      console.error('Error checking for changes:', error);
+    }
+  }
+  
+  // Cache for gitignore patterns
+  private _gitignorePatterns: string[] | null = null;
+  private _gitignorePatternsTimestamp = 0;
+  
+  // Add state tracking properties
+  private _lastMainFilesHash = '';
+  private _lastMainCheckpointsHash = '';
+  private _lastWorkingFilesHash = '';
+  
+  /**
+   * Get files with changes
+   */
+  private getFilesWithChanges(): string[] {
+    const filesWithChanges: string[] = [];
+    
+    this.mainShadowGit.changes.forEach((changes, relativePath) => {
+      if (changes.length > 0) {
+        filesWithChanges.push(relativePath);
+      }
+    });
+    
+    return filesWithChanges;
+  }
+  
+  /**
+   * Get Git changed files  
+   */
+  private async getGitChangedFiles(): Promise<string[]> {
+    try {
+      const gitIntegration = await GitIntegration.getGitAPI();
+      const changes = await gitIntegration.repositories[0].state.workingTreeChanges;
+      return changes.map(change => path.relative(this.mainShadowGit.workspaceRoot, change.uri.fsPath));
+    } catch (error) {
+      return [];
+    }
   }
   
   /**
@@ -1064,21 +1518,8 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
       return;
     }
     
-    // Get data from Shadow Git instances for the Checkpoints tab
-    // IMPORTANT: Only show files that have CHANGES, not all tracked files
-    const trackedFiles = this.mainShadowGit.getTrackedFiles();
-    console.log(`Refresh: Found ${trackedFiles.length} tracked files`);
-    
-    // Get files with changes (use the changes Map instead of all tracked files)
-    const filesWithChanges: string[] = [];
-    
-    // The changes Map contains only files with actual changes
-    this.mainShadowGit.changes.forEach((changes, relativePath) => {
-      if (changes.length > 0) {
-        filesWithChanges.push(relativePath);
-      }
-    });
-    
+    // Get files with changes using helper method
+    const filesWithChanges = this.getFilesWithChanges();
     console.log(`Refresh: Found ${filesWithChanges.length} files with changes`);
     
     // Get checkpoints
@@ -1120,7 +1561,9 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         baseCommit: null,            // No concept of base commit anymore
         gitStatus: gitStatusMap,
         gitType: gitTypeMap,
-        gitUriMap: gitUriMap
+        gitUriMap: gitUriMap,
+        openCheckpoints: Array.from(this._openCheckpoints), // Pass which checkpoints are open
+        checkpointScrollPositions: Array.from(this._checkpointScrollPositions.entries()) // Pass scroll positions
       });
     } catch (error) {
       console.error('Failed to get Git changes:', error);
@@ -1136,6 +1579,261 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
         gitStatus: {},
         gitType: {},
         gitUriMap: {}
+      });
+    }
+  }
+  
+  /**
+   * Read .gitignore patterns with caching
+   */
+  private async readGitignorePatterns(): Promise<string[]> {
+    const gitignorePath = path.join(this.mainShadowGit.workspaceRoot, '.gitignore');
+    const now = Date.now();
+    
+    // Check if we have cached patterns and if they're still valid (5 minutes cache)
+    if (this._gitignorePatterns && now - this._gitignorePatternsTimestamp < 300000) {
+      return this._gitignorePatterns;
+    }
+    
+    const patterns: string[] = [];
+    
+    try {
+      if (fs.existsSync(gitignorePath)) {
+        const content = fs.readFileSync(gitignorePath, 'utf8');
+        const lines = content.split('\n');
+        
+        for (const line of lines) {
+          const trimmed = line.trim();
+          // Skip empty lines and comments
+          if (trimmed && !trimmed.startsWith('#')) {
+            // Handle negation patterns (!)
+            if (trimmed.startsWith('!')) {
+              // For now, we'll skip negation patterns as they're complex to implement
+              continue;
+            }
+            patterns.push(trimmed);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error reading .gitignore:', error);
+    }
+    
+    // Add common patterns that should always be ignored
+    patterns.push('node_modules/**');
+    patterns.push('.git/**');
+    patterns.push('dist/**');
+    patterns.push('build/**');
+    patterns.push('out/**');
+    patterns.push('*.log');
+    patterns.push('*.log.*');
+    patterns.push('.DS_Store');
+    patterns.push('Thumbs.db');
+    patterns.push('.vscode/.shadowgit-*/**');
+    patterns.push('*.tmp');
+    patterns.push('*.temp');
+    patterns.push('*.cache');
+    
+    // If .vscode is in gitignore, make sure we honor it completely
+    // Some projects ignore entire .vscode directory
+    if (patterns.some(p => p === '.vscode' || p === '.vscode/')) {
+      patterns.push('.vscode/**');
+    }
+    
+    // Cache the patterns
+    this._gitignorePatterns = patterns;
+    this._gitignorePatternsTimestamp = now;
+    
+    return patterns;
+  }
+  
+  /**
+   * Check if a file should be ignored based on gitignore patterns
+   * 
+   * Examples of patterns and what they match:
+   * - `.vscode` -> Ignores .vscode directory and all its contents
+   * - `.vscode/` -> Same as above
+   * - `.vscode/**` -> Same as above
+   * - `.vscode/*` -> Only immediate children of .vscode
+   * - `*.log` -> All files ending with .log
+   * - `/dist` -> Only dist at root level
+   * - `dist` -> Any dist directory at any level
+   */
+  private shouldIgnoreFile(filePath: string, patterns: string[]): boolean {
+    const relativePath = path.relative(this.mainShadowGit.workspaceRoot, filePath);
+    const pathParts = relativePath.split(path.sep);
+    
+    for (const pattern of patterns) {
+      // Remove leading slash if present
+      const cleanPattern = pattern.startsWith('/') ? pattern.slice(1) : pattern;
+      
+      // Handle different pattern types
+      if (cleanPattern.endsWith('/**')) {
+        // Directory with all subdirectories pattern
+        const dir = cleanPattern.slice(0, -3);
+        if (relativePath.startsWith(dir + '/') || relativePath === dir) {
+          return true;
+        }
+      } else if (cleanPattern.endsWith('/*')) {
+        // Directory with immediate children only
+        const dir = cleanPattern.slice(0, -2);
+        const dirParts = dir.split('/');
+        if (pathParts.length === dirParts.length + 1 && relativePath.startsWith(dir + '/')) {
+          return true;
+        }
+      } else if (cleanPattern.endsWith('/')) {
+        // Directory pattern (same as without trailing slash)
+        const dir = cleanPattern.slice(0, -1);
+        if (relativePath.startsWith(dir + '/') || relativePath === dir) {
+          return true;
+        }
+      } else if (cleanPattern.startsWith('*.')) {
+        // Extension pattern
+        const ext = cleanPattern.slice(1);
+        if (relativePath.endsWith(ext)) {
+          return true;
+        }
+      } else if (cleanPattern.includes('*')) {
+        // Wildcard pattern - convert to regex
+        const regexPattern = cleanPattern
+          .replace(/\./g, '\\.')
+          .replace(/\*/g, '.*')
+          .replace(/\?/g, '.');
+        const regex = new RegExp('^' + regexPattern + '$');
+        if (regex.test(relativePath)) {
+          return true;
+        }
+      } else {
+        // Exact match or directory without trailing slash
+        // Check if it's a directory pattern (matches directory and all contents)
+        if (relativePath === cleanPattern || 
+            relativePath.startsWith(cleanPattern + '/') ||
+            // Also check each directory in the path
+            pathParts.some((_, index) => 
+              pathParts.slice(0, index + 1).join('/') === cleanPattern
+            )) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Start the checkpoint creation process
+   */
+  private async startCheckpointProcess(): Promise<void> {
+    try {
+      // Send progress update
+      this._view?.webview.postMessage({
+        command: 'checkpointProgress',
+        text: 'Reading .gitignore patterns...'
+      });
+      
+      // Read gitignore patterns
+      const gitignorePatterns = await this.readGitignorePatterns();
+      
+      this._view?.webview.postMessage({
+        command: 'checkpointProgress',
+        text: 'Scanning workspace files...'
+      });
+      
+      // Find all files in workspace
+      const files = await vscode.workspace.findFiles(
+        '**/*',
+        undefined, // Let's handle exclusion ourselves
+        10000
+      );
+      
+      // Filter files based on gitignore
+      const validFiles = files.filter(file => !this.shouldIgnoreFile(file.fsPath, gitignorePatterns));
+      
+      this._view?.webview.postMessage({
+        command: 'checkpointProgress',
+        text: `Found ${validFiles.length} files to check (${files.length - validFiles.length} ignored)...`
+      });
+      
+      // Track untracked files
+      let trackedCount = 0;
+      for (const file of validFiles) {
+        try {
+          const relativePath = path.relative(this.mainShadowGit.workspaceRoot, file.fsPath);
+          
+          if (!this.mainShadowGit.snapshots.has(relativePath)) {
+            const stats = fs.statSync(file.fsPath);
+            if (stats.size > 5 * 1024 * 1024) {
+              continue;
+            }
+            
+            this.mainShadowGit.takeSnapshot(file.fsPath);
+            trackedCount++;
+          }
+        } catch (error) {
+          // Skip files that can't be processed
+        }
+      }
+      
+      this._view?.webview.postMessage({
+        command: 'checkpointProgress',
+        text: `Tracked ${trackedCount} new files. Detecting changes...`
+      });
+      
+      // Detect changes
+      this.mainShadowGit.detectChangesInAllTrackedFiles();
+      const changedFilesCount = this.mainShadowGit.changes.size;
+      
+      this._view?.webview.postMessage({
+        command: 'checkpointProgress',
+        text: `Found ${changedFilesCount} files with changes`
+      });
+      
+      // Ready for message input
+      this._view?.webview.postMessage({
+        command: 'checkpointReady'
+      });
+      
+    } catch (error) {
+      this._view?.webview.postMessage({
+        command: 'checkpointError',
+        text: (error as Error).message
+      });
+    }
+  }
+  
+  /**
+   * Create checkpoint with the provided message
+   */
+  private async createCheckpointWithMessage(message: string): Promise<void> {
+    try {
+      const filesWithChanges = Array.from(this.mainShadowGit.changes.keys());
+      
+      // Approve all changes
+      for (const filePath of filesWithChanges) {
+        try {
+          const fullPath = path.join(this.mainShadowGit.workspaceRoot, filePath);
+          this.mainShadowGit.approveAllChanges(fullPath);
+        } catch (error) {
+          console.error(`Error approving changes for ${filePath}:`, error);
+        }
+      }
+      
+      // Create the checkpoint
+      const checkpoint = this.mainShadowGit.createCheckpoint(message);
+      const filesCount = Object.keys(checkpoint.changes).length;
+      
+      this._view?.webview.postMessage({
+        command: 'checkpointCreated',
+        text: `Checkpoint created with ${filesCount} files`
+      });
+      
+      // Refresh the view
+      setTimeout(() => this.refresh(), 500);
+      
+    } catch (error) {
+      this._view?.webview.postMessage({
+        command: 'checkpointError',
+        text: (error as Error).message
       });
     }
   }

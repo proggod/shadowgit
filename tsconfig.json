@@ -15,5 +15,5 @@
     "strictNullChecks": false
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", ".vscode-test", "src/complete_openShadowDiffCommand.ts", "src/fixed_openShadowDiffCommand.ts"]
+  "exclude": ["node_modules", ".vscode-test"]
 }

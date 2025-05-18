@@ -29,7 +29,6 @@ async function main() {
   const extensionCtx = await esbuild.context({
     entryPoints: [
       'src/extension.ts',
-      'src/enhancedExtension.ts',
       'src/debug_extension.ts'
     ],
     bundle: true,

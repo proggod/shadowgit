@@ -53,13 +53,15 @@ export function createGitDiffCommand(): vscode.Disposable {
         
         // Find the repository that contains this file
         const filePath = uri.fsPath;
-        let repo = repositories[0]; // Default to first repo
+        // Repository finding logic - not currently used but might be needed later
+        // let repo = repositories[0]; // Default to first repo
         
         // Try to find a better match if there are multiple repositories
         if (repositories.length > 1) {
           for (const r of repositories) {
             if (filePath.startsWith(r.rootUri.fsPath)) {
-              repo = r;
+              // Found matching repository for the file
+              // repo = r;
               break;
             }
           }

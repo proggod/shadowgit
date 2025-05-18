@@ -57,7 +57,9 @@ export class ShadowGitTimelineProvider {
    */
   public async provideTimeline(
     uri: vscode.Uri,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _options: TimelineOptions,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _token: vscode.CancellationToken
   ): Promise<Timeline> {
     if (!this.shadowGit) {
