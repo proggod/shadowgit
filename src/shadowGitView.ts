@@ -426,24 +426,9 @@ export class ShadowGitViewProvider implements vscode.WebviewViewProvider {
    */
   private async deleteCheckpoint(checkpointId: string): Promise<void> {
     try {
-      // Confirm deletion with user
-      const confirmation = await vscode.window.showWarningMessage(
-        `Are you sure you want to delete checkpoint ${checkpointId.substring(0, 8)}?`,
-        { modal: true },
-        'Delete'
-      );
-      
-      if (confirmation === 'Delete') {
-        // Delete the checkpoint
-        const result = this.shadowGit.deleteCheckpoint(checkpointId);
-        
-        if (result) {
-          vscode.window.showInformationMessage(`Checkpoint ${checkpointId.substring(0, 8)} deleted successfully`);
-          this.refresh();
-        } else {
-          vscode.window.showErrorMessage(`Failed to delete checkpoint ${checkpointId.substring(0, 8)}`);
-        }
-      }
+      // Let the command handle the confirmation dialog
+      await vscode.commands.executeCommand('shadowGit.deleteCheckpoint', checkpointId);
+      this.refresh();
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to delete checkpoint: ${(error as Error).message}`);
     }

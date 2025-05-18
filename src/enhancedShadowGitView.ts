@@ -92,6 +92,7 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           break;
         case 'deleteCheckpoint':
           console.log('WebView requested deleteCheckpoint for ID:', message.id);
+          // Let the command handle the confirmation dialog
           vscode.commands.executeCommand('shadowGit.deleteCheckpoint', message.id)
             .then(() => {
               console.log('Refreshing WebView after deleteCheckpoint command');

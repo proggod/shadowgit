@@ -1118,11 +1118,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.window.showInformationMessage('Shadow Git Test Command Works!');
   });
 
-  // Add a test command for testing checkpoint deletion
+  // Add a test command for debugging purposes (disabled for production)
   const testDeleteCommand = vscode.commands.registerCommand('shadowGit.testDelete', async () => {
     outputChannel.appendLine('Test delete command executed!');
-    console.log('SHADOW_GIT_DEBUG: Test delete command executed');
+    console.log('SHADOW_GIT_DEBUG: Test delete command is now disabled to avoid duplication');
+    vscode.window.showInformationMessage('Please use the regular deletion functionality from the UI');
     
+    // Original functionality is commented out to avoid duplicate deletion workflow
+    /*
     try {
       // Get the workspace root
       if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
@@ -1188,6 +1191,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       console.error('Error deleting checkpoint:', error);
       vscode.window.showErrorMessage(`Manual deletion failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    */
   });
   
   // Register the Git diff command
