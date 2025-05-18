@@ -842,8 +842,8 @@ export class ShadowGit {
         }
       }
       
-      // Sort checkpoints by timestamp
-      this.checkpoints.sort((a, b) => a.timestamp - b.timestamp);
+      // Sort checkpoints by timestamp (newest first)
+      this.checkpoints.sort((a, b) => b.timestamp - a.timestamp);
     } catch (error) {
       console.error('Failed to load checkpoints:', error);
     }
@@ -908,9 +908,11 @@ export class ShadowGit {
 
   /**
    * Get all checkpoints
-   * @returns Array of checkpoint objects
+   * @returns Array of checkpoint objects, sorted by timestamp (newest first)
    */
   public getCheckpoints(): Checkpoint[] {
+    // Return a copy of the checkpoints array, already sorted by timestamp (newest first)
+    // This ensures the UI always shows the newest checkpoints at the top
     return [...this.checkpoints];
   }
   
