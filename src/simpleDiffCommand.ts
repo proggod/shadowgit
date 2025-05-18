@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+// import * as fs from 'fs';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
-import { GitUtils } from './gitUtils';
+// import { GitUtils } from './gitUtils';
 
 /**
  * Creates a command to open a simple diff view - no custom decorations, just using VS Code's built-in diff
@@ -11,7 +11,7 @@ import { GitUtils } from './gitUtils';
 export function createSimpleDiffCommand(
   context: vscode.ExtensionContext,
   mainShadowGit: ShadowGit,
-  workingShadowGit: ShadowGitWithGit
+  workingShadowGit?: ShadowGitWithGit | null
 ): vscode.Disposable[] {
   const commands: vscode.Disposable[] = [];
   
@@ -81,7 +81,7 @@ async function openSimpleDiff(
       }
       
       // Create temp file for the snapshot
-      const tempPath = shadowGit.createTempSnapshotFile(relativePath);
+      shadowGit.createTempSnapshotFile(relativePath);
       
       progress.report({ message: "Opening diff view..." });
       
@@ -120,7 +120,7 @@ async function openSimpleDiff(
             
             // Check if this file is tracked by Git
             if (repo.state.workingTreeChanges) {
-              const gitChange = repo.state.workingTreeChanges.find((change: any) => 
+              const gitChange = repo.state.workingTreeChanges.find((change: { uri: vscode.Uri }) => 
                 change.uri.fsPath === uri.fsPath
               );
               

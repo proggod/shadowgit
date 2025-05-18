@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
 import { DiffDecorationProvider } from './diffProvider';
-import { GitUtils } from './gitUtils';
+// import { GitUtils } from './gitUtils';
 
 /**
  * Creates specialized commands for the enhanced Shadow Git system
@@ -169,7 +169,7 @@ async function openDiff(
       }
       
       // Detect changes
-      let changes: any;
+      let changes: { id: number; type: "addition" | "modification" | "deletion"; startLine: number; endLine: number; content: string; approved: boolean | null }[];
       if (shadowGit instanceof ShadowGitWithGit) {
         changes = await shadowGit.detectChanges(filePath);
       } else {
@@ -244,7 +244,7 @@ async function openDiff(
       statusBarItem.show();
       
       // Register the command for the status bar item
-      if (!context.subscriptions.find(d => (d as any)?.command === 'shadowGit.showApprovalOptions') && type === 'main') {
+      if (!context.subscriptions.find(d => (d as { command?: string })?.command === 'shadowGit.showApprovalOptions') && type === 'main') {
         context.subscriptions.push(vscode.commands.registerCommand('shadowGit.showApprovalOptions', async () => {
           const options = ['Approve All Changes', 'Disapprove All Changes'];
           const choice = await vscode.window.showQuickPick(options, { placeHolder: 'Choose an action' });
@@ -260,7 +260,7 @@ async function openDiff(
       }
       
       // Register similar command for working shadow git staging
-      if (!context.subscriptions.find(d => (d as any)?.command === 'shadowGit.showStagingOptions') && type === 'working') {
+      if (!context.subscriptions.find(d => (d as { command?: string })?.command === 'shadowGit.showStagingOptions') && type === 'working') {
         context.subscriptions.push(vscode.commands.registerCommand('shadowGit.showStagingOptions', async () => {
           const options = ['Stage All Changes', 'Unstage All Changes'];
           const choice = await vscode.window.showQuickPick(options, { placeHolder: 'Choose an action' });

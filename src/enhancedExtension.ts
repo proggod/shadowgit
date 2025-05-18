@@ -1,7 +1,7 @@
-// @ts-nocheck
+// Enhanced extension functionality
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+// import * as fs from 'fs';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
 import { DiffDecorationProvider } from './diffProvider';
@@ -62,7 +62,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         // Create diff decoration providers (still needed for backwards compatibility)
         progress.report({ message: 'Setting up diff decorations...' });
         mainDiffDecorationProvider = new DiffDecorationProvider(context, mainShadowGit);
-        workingDiffDecorationProvider = new DiffDecorationProvider(context, workingShadowGit as any); // Type compatibility
+        workingDiffDecorationProvider = new DiffDecorationProvider(context, workingShadowGit as unknown as ShadowGit); // Type compatibility
         
         // Create SCM provider for main ShadowGit (optional for working since we have Git)
         progress.report({ message: 'Creating SCM integration...' });
@@ -75,12 +75,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         if (vscode.workspace.getConfiguration('shadowGit').get('showCheckpointsInTimeline')) {
           try {
             // Check if the timeline API is available
-            // @ts-ignore - using the timeline API dynamically
-            if (vscode.timeline && typeof vscode.timeline.registerTimelineProvider === 'function') {
-              // @ts-ignore - using the timeline API dynamically
+            // Access the timeline API with type casting for better type safety
+            if ('timeline' in vscode && typeof (vscode as { timeline: { registerTimelineProvider: (...args: unknown[]) => { dispose(): void } } }).timeline.registerTimelineProvider === 'function') {
+              // Push the timeline provider to subscriptions with type casting
               context.subscriptions.push(
-                // @ts-ignore - using the timeline API dynamically
-                vscode.timeline.registerTimelineProvider(['file', 'git'], mainTimelineProvider, {
+                // Register the timeline provider using type assertion
+                (vscode as { timeline: { registerTimelineProvider: (...args: unknown[]) => { dispose(): void } } }).timeline.registerTimelineProvider(['file', 'git'], mainTimelineProvider, {
                   scheme: 'file',
                   enableForWorkspace: true
                 })
@@ -145,7 +145,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               const filePath = editor.document.uri.fsPath;
               await editor.document.save();
               
-              const snapshot = mainShadowGit.takeSnapshot(filePath);
+              mainShadowGit.takeSnapshot(filePath);
               const fileName = path.basename(filePath);
               
               vscode.window.showInformationMessage(`Checkpoint snapshot taken: ${fileName}`);

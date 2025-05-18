@@ -77,7 +77,8 @@ export class ShadowGitFileSystemProvider implements vscode.FileSystemProvider {
   /**
    * Write a file with a ShadowGit URI (not implemented - read-only)
    */
-  writeFile(uri: vscode.Uri, content: Uint8Array, options: { create: boolean, overwrite: boolean }): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  writeFile(_uri: vscode.Uri, _content: Uint8Array, _options: { create: boolean, overwrite: boolean }): void {
     // ShadowGit files should be read-only for the FileSystemProvider, 
     // as we handle modifications through our own systems
     throw vscode.FileSystemError.NoPermissions('ShadowGit files are read-only');
@@ -111,27 +112,31 @@ export class ShadowGitFileSystemProvider implements vscode.FileSystemProvider {
   /**
    * Create a directory (not implemented - read-only)
    */
-  createDirectory(uri: vscode.Uri): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  createDirectory(_uri: vscode.Uri): void {
     throw vscode.FileSystemError.NoPermissions('ShadowGit filesystem is read-only');
   }
 
   /**
    * Delete a file (not implemented - read-only)
    */
-  delete(uri: vscode.Uri, options: { recursive: boolean }): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  delete(_uri: vscode.Uri, _options: { recursive: boolean }): void {
     throw vscode.FileSystemError.NoPermissions('ShadowGit filesystem is read-only');
   }
 
   /**
    * Rename a file (not implemented - read-only)
    */
-  rename(oldUri: vscode.Uri, newUri: vscode.Uri, options: { overwrite: boolean }): void {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  rename(_oldUri: vscode.Uri, _newUri: vscode.Uri, _options: { overwrite: boolean }): void {
     throw vscode.FileSystemError.NoPermissions('ShadowGit filesystem is read-only');
   }
 
   /**
    * Read a directory (list files) from a ShadowGit URI
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async readDirectory(uri: vscode.Uri): Promise<[string, vscode.FileType][]> {
     // We don't support directory listing in ShadowGit
     throw vscode.FileSystemError.FileNotFound(uri);
@@ -145,8 +150,15 @@ export class ShadowGitFileSystemProvider implements vscode.FileSystemProvider {
   /**
    * Watch a file or directory for changes (no-op)
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   watch(_resource: vscode.Uri): vscode.Disposable {
     // We don't need to watch for changes - we'll manage them ourselves
-    return { dispose: () => {} };
+    // Return a disposable with an empty implementation that satisfies the interface
+    return { 
+      dispose: function(): void {
+        // Intentionally empty as we don't need cleanup
+        // No resources to release since we don't actually watch anything
+      } 
+    };
   }
 }

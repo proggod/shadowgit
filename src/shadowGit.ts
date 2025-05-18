@@ -129,7 +129,10 @@ export class ShadowGit {
       if (!fs.existsSync(filePath)) {
         console.log(`ShadowGit.detectChanges: File ${filePath} no longer exists`);
         // File was deleted - consider this a special case
-        const snapshot = this.snapshots.get(relativePath)!;
+        const snapshot = this.snapshots.get(relativePath);
+        if (!snapshot) {
+          throw new Error(`No snapshot found for ${relativePath}`);
+        }
         const deletionChange: Change = {
           id: 0,
           type: 'deletion',
@@ -151,7 +154,10 @@ export class ShadowGit {
       const currentLines = currentContent.split('\n');
       
       // Get snapshot content
-      const snapshot = this.snapshots.get(relativePath)!;
+      const snapshot = this.snapshots.get(relativePath);
+      if (!snapshot) {
+        throw new Error(`No snapshot found for ${relativePath}`);
+      }
       const snapshotLines = snapshot.lines;
       
       // Quick check - if content is identical, no changes
@@ -516,7 +522,7 @@ export class ShadowGit {
     // Iterate through all snapshots and detect changes
     let processedFiles = 0;
     
-    for (const [relativePath, snapshot] of this.snapshots.entries()) {
+    for (const [relativePath] of this.snapshots.entries()) {
       try {
         const filePath = path.join(this.workspaceRoot, relativePath);
         
@@ -649,7 +655,10 @@ export class ShadowGit {
     // First check if we have a current snapshot
     if (this.snapshots.has(relativePath)) {
       console.log(`ShadowGit.findSnapshotForFile: Found in-memory snapshot for ${relativePath}`);
-      return this.snapshots.get(relativePath)!;
+      const snapshot = this.snapshots.get(relativePath);
+      if (snapshot) {
+        return snapshot;
+      }
     }
     
     // If no snapshot is found, try to read one from disk

@@ -3,18 +3,18 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
-import { DiffDecorationProvider } from './diffProvider';
-import { ShadowGitFilesProvider, ShadowGitCheckpointsProvider } from './viewProvider';
-import { ShadowGitSCMProvider } from './scmProvider';
+// import { DiffDecorationProvider } from './diffProvider';
+// import { ShadowGitFilesProvider, ShadowGitCheckpointsProvider } from './viewProvider';
+// import { ShadowGitSCMProvider } from './scmProvider';
 import { ShadowGitViewProvider } from './shadowGitView';
 import { EnhancedShadowGitViewProvider } from './enhancedShadowGitView';
 import { ShadowGitTimelineProvider } from './timelineProvider';
 import { createSimpleDiffCommand } from './simpleDiffCommand';
-import { createWorkingDiffCommand } from './workingDiffCommand';
+// import { createWorkingDiffCommand } from './workingDiffCommand';
 import { ShadowGitFileSystemProvider } from './shadowGitFileSystemProvider';
 import { createGitDiffCommand } from './gitDiffCommand';
 import { createHybridGitCommand } from './hybridGitCommand';
-import { GitIntegration } from './gitIntegration';
+// import { GitIntegration } from './gitIntegration';
 import { createDebugDiffCommand } from './debugDiffCommand';
 import { createDirectGitDiffCommand } from './directGitDiffCommand';
 
@@ -25,6 +25,16 @@ type ShadowGitType = 'main' | 'working';
 interface TimelineOptions {
   cursor?: string;
   limit?: number;
+}
+
+// Define interfaces for providers to avoid 'never' type issues
+interface NullableSCMProvider {
+  update?: () => void;
+}
+
+interface NullableDecorationProvider {
+  refreshDecorations?: (uri: vscode.Uri) => void;
+  handleChangeContextMenu?: (uri: vscode.Uri, line: number) => Promise<void>;
 }
 
 /**
@@ -44,7 +54,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   
   try {
     // Add version info
-    const packageJson = require('../package.json');
+    // Using fs to read package.json directly for better type checking
+    const packageJsonPath = path.join(__dirname, '../package.json');
+    const packageJsonContent = fs.readFileSync(packageJsonPath, 'utf8');
+    const packageJson = JSON.parse(packageJsonContent);
     outputChannel.appendLine("Shadow Git version: " + packageJson.version);
     console.log("SHADOW_GIT_DEBUG: Extension version " + packageJson.version);
     
@@ -74,14 +87,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   console.log('SHADOW_GIT_DEBUG: Initializing ShadowGit instances');
   
   // Initialize ShadowGit instances
+  // These variables may be reassigned later
   let mainShadowGit: ShadowGit | null = null;
   let workingShadowGit: ShadowGitWithGit | null = null;
-  let mainDiffDecorationProvider: DiffDecorationProvider | null = null;
-  let workingDiffDecorationProvider: DiffDecorationProvider | null = null;
-  let mainSCMProvider: ShadowGitSCMProvider | null = null;
-  let workingSCMProvider: ShadowGitSCMProvider | null = null;
   let mainTimelineProvider: ShadowGitTimelineProvider | null = null;
-  let workingTimelineProvider: ShadowGitTimelineProvider | null = null;
+  
+  // These variables are never reassigned in this code
+  // Using custom interfaces to avoid 'never' type issues
+  const mainDiffDecorationProvider: NullableDecorationProvider = {};
+  // const workingDiffDecorationProvider: NullableDecorationProvider = {};
+  const mainSCMProvider: NullableSCMProvider = {};
+  const workingSCMProvider: NullableSCMProvider = {};
+  // const workingTimelineProvider: ShadowGitTimelineProvider | undefined = undefined;
 
   if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
     const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
@@ -174,24 +191,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           
           // Use a compatible approach to register the timeline provider
           // The API has changed since this code was written, so we need to fix it
-          // @ts-ignore - The timeline API might not be fully declared in the TypeScript definitions
-          if (vscode.timeline) {
+          // Handle timeline API which might not be fully declared in some versions of VS Code typings
+          if ('timeline' in vscode) {
             outputChannel.appendLine('Timeline API found, attempting to register provider');
             
             // Register the timeline provider properly
             // Note: We register for both 'file' and 'git' sources since our checkpoints 
             // are relevant to both types of resources
-            // @ts-ignore - Using the timeline API dynamically
-            const disposable = vscode.timeline.registerTimelineProvider(
+            // Access timeline API with proper type assertion
+            const disposable = (vscode as { timeline: { registerTimelineProvider: (...args: unknown[]) => { dispose(): void } } }).timeline.registerTimelineProvider(
               ['file', 'git'],
               {
                 id: 'shadowgit',
                 label: 'Shadow Git',
-                // @ts-ignore - Using the timeline API dynamically with proper types
-                provideTimeline: (uri: vscode.Uri, options: TimelineOptions, token: vscode.CancellationToken) => {
-                  return mainTimelineProvider!.provideTimeline(uri, options, token);
+                // Provide timeline implementation with properly typed parameters
+                provideTimeline: (uri: vscode.Uri, options: TimelineOptions, token: vscode.CancellationToken): unknown[] | Promise<unknown> => {
+                  // Ensure mainTimelineProvider exists before calling its methods
+                  if (mainTimelineProvider) {
+                    return mainTimelineProvider.provideTimeline(uri, options, token);
+                  }
+                  return [];
                 },
-                onDidChange: mainTimelineProvider!.onDidChange
+                onDidChange: mainTimelineProvider ? mainTimelineProvider.onDidChange : undefined
               }
             );
             
@@ -311,7 +332,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       // Take snapshot in main ShadowGit only
       outputChannel.appendLine(`Taking snapshot of ${filePath}`);
-      const mainSnapshot = mainShadowGit.takeSnapshot(filePath);
+      mainShadowGit.takeSnapshot(filePath);
       
       const fileName = path.basename(filePath);
       outputChannel.appendLine(`Snapshot taken successfully: ${fileName}`);
@@ -493,7 +514,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       console.log('SHADOW_GIT_DEBUG: Creating simple diff command');
       
       // Use the simple diff command implementation
-      mainDiffCommands = createSimpleDiffCommand(context, mainShadowGit, workingShadowGit!);
+      // Pass mainShadowGit and workingShadowGit which might be null
+      mainDiffCommands = createSimpleDiffCommand(context, mainShadowGit, workingShadowGit);
       
       outputChannel.appendLine(`Created ${mainDiffCommands.length} diff commands`);
       console.log("SHADOW_GIT_DEBUG: Created ${mainDiffCommands.length} diff commands");
@@ -504,7 +526,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
   
   // Use direct Git command approach for best compatibility
-  let workingDiffCommand: vscode.Disposable = vscode.commands.registerCommand('shadowGit.openWorkingDiff', async (uri: vscode.Uri, commit?: string) => {
+  const workingDiffCommand: vscode.Disposable = vscode.commands.registerCommand('shadowGit.openWorkingDiff', async (uri: vscode.Uri, commit?: string) => {
     outputChannel.appendLine('Opening working diff with direct Git command integration');
     console.log('SHADOW_GIT_DEBUG: Opening diff using git.openChange for staging buttons');
     
@@ -536,7 +558,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (mainShadowGit && mainShadowGit.checkpoints.find(cp => cp.id === checkpointId)) {
       targetShadowGit = mainShadowGit;
     } else if (workingShadowGit && workingShadowGit.checkpoints.find(cp => cp.id === checkpointId)) {
-      targetShadowGit = workingShadowGit as any;
+      targetShadowGit = workingShadowGit as unknown as ShadowGit;
     }
     
     if (!targetShadowGit) {
@@ -549,7 +571,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const relativePath = path.relative(targetShadowGit.workspaceRoot, filePath);
       
       // Get checkpoint
-      const checkpoint = targetShadowGit.checkpoints.find(cp => cp.id === checkpointId)!;
+      const checkpoint = targetShadowGit.checkpoints.find(cp => cp.id === checkpointId);
+      
+      // Verify the checkpoint exists
+      if (!checkpoint) {
+        vscode.window.showErrorMessage(`Checkpoint ${checkpointId} not found`);
+        return;
+      }
       
       // Only continue if the checkpoint affected this file
       if (!checkpoint.changes[relativePath]) {
@@ -710,7 +738,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       if (success) {
         console.log("Change approved successfully, refreshing decorations");
-        mainDiffDecorationProvider!.refreshDecorations(uri);
+        mainDiffDecorationProvider?.refreshDecorations(uri);
         mainSCMProvider?.update();
         vscode.window.showInformationMessage(`Change approved`);
       } else {
@@ -735,7 +763,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const success = mainShadowGit.disapproveChange(filePath, changeId);
       
       if (success) {
-        mainDiffDecorationProvider!.refreshDecorations(uri);
+        mainDiffDecorationProvider?.refreshDecorations(uri);
         mainSCMProvider?.update();
         vscode.window.showInformationMessage(`Change disapproved`);
       } else {
@@ -763,7 +791,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const filePath = editor.document.uri.fsPath;
       const count = mainShadowGit.approveAllChanges(filePath);
       
-      mainDiffDecorationProvider!.refreshDecorations(editor.document.uri);
+      mainDiffDecorationProvider?.refreshDecorations(editor.document.uri);
       mainSCMProvider?.update();
       vscode.window.showInformationMessage(`Approved ${count} changes`);
     } catch (error) {
@@ -788,7 +816,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const filePath = editor.document.uri.fsPath;
       const count = mainShadowGit.disapproveAllChanges(filePath);
       
-      mainDiffDecorationProvider!.refreshDecorations(editor.document.uri);
+      mainDiffDecorationProvider?.refreshDecorations(editor.document.uri);
       mainSCMProvider?.update();
       vscode.window.showInformationMessage(`Disapproved ${count} changes`);
     } catch (error) {
@@ -876,7 +904,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
               }
               
               // Take a snapshot and then detect changes
-              let changes: any[] = [];
+              let changes: { id: number; type: string; startLine: number; endLine: number; content: string; approved: boolean | null }[] = [];
               if (mainShadowGit) {
                 mainShadowGit.takeSnapshot(file.fsPath);
                 changes = mainShadowGit.detectChanges(file.fsPath);
@@ -1052,7 +1080,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
       
       if (foundCheckpoint) {
-        targetShadowGit = workingShadowGit as any;
+        targetShadowGit = workingShadowGit as unknown as ShadowGit;
         outputChannel.appendLine(`Found checkpoint in working ShadowGit instance: ${foundCheckpoint.id}`);
         console.log("SHADOW_GIT_DEBUG: Found checkpoint in working ShadowGit instance: ${foundCheckpoint.id}");
       }
@@ -1107,8 +1135,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           // Try to find the view in other ways
           try {
             // This may not be available in all VS Code versions
-            // @ts-ignore - This might not be in the typings
-            const views = vscode.window.visibleWebviewPanels;
+            // Access visibleWebviewPanels with type assertion to avoid @ts-ignore
+            const views = (vscode.window as { visibleWebviewPanels?: unknown[] }).visibleWebviewPanels;
             if (views && views.length > 0) {
               console.log("SHADOW_GIT_DEBUG: Found ${views.length} visible WebView panels");
             }
@@ -1145,7 +1173,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       outputChannel.appendLine(`Found checkpoint in main ShadowGit instance`);
       console.log("SHADOW_GIT_DEBUG: Found checkpoint in main ShadowGit instance");
     } else if (workingShadowGit && workingShadowGit.checkpoints.find(cp => cp.id === checkpointId)) {
-      targetShadowGit = workingShadowGit as any;
+      targetShadowGit = workingShadowGit as unknown as ShadowGit;
       outputChannel.appendLine(`Found checkpoint in working ShadowGit instance`);
       console.log("SHADOW_GIT_DEBUG: Found checkpoint in working ShadowGit instance");
     }
@@ -1160,7 +1188,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     
     try {
       // Get checkpoint details for better messages
-      const checkpoint = targetShadowGit.checkpoints.find(cp => cp.id === checkpointId)!;
+      const checkpoint = targetShadowGit.checkpoints.find(cp => cp.id === checkpointId);
+      
+      // Verify the checkpoint exists
+      if (!checkpoint) {
+        vscode.window.showErrorMessage(`Checkpoint ${checkpointId} not found`);
+        return;
+      }
+      
       const affectedFiles = Object.keys(checkpoint.changes);
       
       outputChannel.appendLine(`Checkpoint will restore ${affectedFiles.length} files: ${affectedFiles.join(', ')}`);
@@ -1190,7 +1225,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         progress.report({ message: 'Checking for current modifications...' });
         
         // Check current modified files that may need special handling
-        let currentlyModifiedFiles: string[] = [];
+        const currentlyModifiedFiles: string[] = [];
         
         // Force detect changes in all tracked files to make sure we have the latest changes
         if (targetShadowGit) {
@@ -1210,7 +1245,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         progress.report({ message: 'Applying checkpoint...' });
         
         // Apply the checkpoint - our enhanced version handles current changes properly
-        targetShadowGit!.applyCheckpoint(checkpointId);
+        // We already checked that targetShadowGit exists earlier, but we'll verify again
+        if (targetShadowGit) {
+          targetShadowGit.applyCheckpoint(checkpointId);
+        }
         
         // Show detailed information
         progress.report({ message: `Restored ${affectedFiles.length} files` });
@@ -1285,24 +1323,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const gitDiffCommand = createGitDiffCommand();
   
   // Register the hybrid Git/ShadowGit command
-  const hybridDiffCommand = createHybridGitCommand(context, mainShadowGit!, workingShadowGit);
+  // Create the hybrid diff command only if mainShadowGit exists
+  const hybridDiffCommand = mainShadowGit ? createHybridGitCommand(context, mainShadowGit, workingShadowGit) : vscode.commands.registerCommand('shadowGit.openHybridDiff', () => {
+    vscode.window.showErrorMessage('Shadow Git is not properly initialized');
+  });
   
   // Register the debug diff command
   const debugDiffCommand = createDebugDiffCommand(context);
   
   // Register the direct Git diff command
-  const directGitDiffCommand = createDirectGitDiffCommand(context, mainShadowGit!, workingShadowGit);
+  // Create the direct Git diff command only if mainShadowGit exists
+  const directGitDiffCommand = mainShadowGit ? createDirectGitDiffCommand(context, mainShadowGit, workingShadowGit) : vscode.commands.registerCommand('shadowGit.openDirectGitDiff', () => {
+    vscode.window.showErrorMessage('Shadow Git is not properly initialized');
+  });
   
   // Command: Refresh UI and data
   const refreshCommand = vscode.commands.registerCommand('shadowGit.refresh', async () => {
     try {
       outputChannel.appendLine('Manually refreshing ShadowGit views');
       console.log('SHADOW_GIT_DEBUG: Refreshing ShadowGit views');
-      
-      // Find any registered WebView provider and refresh it
-      const extensions = vscode.extensions.all.filter(ext => 
-        ext.id === 'shadowgit.shadowgit' || ext.id.includes('shadowgit')
-      );
       
       // Reload any existing WebViews
       for (const view of vscode.window.visibleTextEditors) {
@@ -1365,9 +1404,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   
   // Command: Show change context menu
   const showChangeContextMenuCommand = vscode.commands.registerCommand('shadowGit.showChangeContextMenu', async (uri: vscode.Uri, line: number) => {
-    if (mainDiffDecorationProvider) {
-      await mainDiffDecorationProvider.handleChangeContextMenu(uri, line);
-    }
+    await mainDiffDecorationProvider?.handleChangeContextMenu(uri, line);
   });
   
   // Add command to subscriptions

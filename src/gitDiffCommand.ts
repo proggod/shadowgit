@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+// import * as fs from 'fs';
 
 /**
  * Creates a diff command that uses VS Code's Git extension API directly
@@ -68,7 +68,8 @@ export function createGitDiffCommand(): vscode.Disposable {
         progress.report({ message: 'Creating Git URI...' });
         
         // Check if file is tracked by Git
-        const relativePath = path.relative(repo.rootUri.fsPath, filePath);
+        //        // Not used currently
+        // const relativePath = path.relative(repo.rootUri.fsPath, filePath);
         
         // Create a Git URI to use with VS Code's diff editor
         // This is the key to getting the native staging buttons

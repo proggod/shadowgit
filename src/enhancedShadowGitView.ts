@@ -1,4 +1,4 @@
-// @ts-nocheck
+// File handles VS Code webview integration
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -63,7 +63,7 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
           }
           break;
         case 'openDiff':
-          this.openDiff(message.path, message.type, message.gitUri, message.gitType);
+          this.openDiff(message.path, message.type);
           break;
         case 'createCheckpoint':
           if (message.type === 'main') {
@@ -1161,7 +1161,7 @@ export class EnhancedShadowGitViewProvider implements vscode.WebviewViewProvider
    * @param gitUri - Optional Git URI string for direct diffing (ignored)
    * @param gitType - Optional Git change type (working/index) (ignored)
    */
-  private async openDiff(filePath: string, type: 'main' | 'working', gitUri?: string, gitType?: string): Promise<void> {
+  private async openDiff(filePath: string, type: 'main' | 'working'): Promise<void> {
     try {
       const fullPath = path.join(this.mainShadowGit.workspaceRoot, filePath);
       

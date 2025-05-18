@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
+// import * as path from 'path';
 
 /**
  * Utility class to integrate with VS Code's Git extension
@@ -9,7 +9,7 @@ export class GitIntegration {
    * Get the Git extension API
    * @returns VS Code Git extension API
    */
-  public static async getGitAPI(): Promise<any> {
+  public static async getGitAPI(): Promise<{ repositories: Array<{ rootUri: vscode.Uri; state: { workingTreeChanges: Array<{ uri: vscode.Uri; status: number }>; indexChanges: Array<{ uri: vscode.Uri; status: number }> }; add: (uris: vscode.Uri[]) => Promise<void>; revert: (uris: vscode.Uri[]) => Promise<void> }> }> {
     const gitExtension = vscode.extensions.getExtension('vscode.git');
     if (!gitExtension) {
       throw new Error('Git extension not found');
@@ -32,7 +32,7 @@ export class GitIntegration {
    * @param filePath - Path to a file
    * @returns Git repository containing the file
    */
-  public static async getRepositoryForFile(filePath: string): Promise<any> {
+  public static async getRepositoryForFile(filePath: string): Promise<{ rootUri: vscode.Uri; state: { workingTreeChanges: unknown[]; indexChanges: unknown[] }; add: (uris: vscode.Uri[]) => Promise<void>; revert: (uris: vscode.Uri[]) => Promise<void> }> {
     const git = await this.getGitAPI();
     const repositories = git.repositories;
     
@@ -60,7 +60,7 @@ export class GitIntegration {
    * Get the repository for the current workspace
    * @returns Git repository for the workspace
    */
-  public static async getWorkspaceRepository(): Promise<any> {
+  public static async getWorkspaceRepository(): Promise<{ rootUri: vscode.Uri; state: { workingTreeChanges: unknown[]; indexChanges: unknown[] } }> {
     // Get the Git API
     const git = await this.getGitAPI();
     const repositories = git.repositories;
@@ -105,7 +105,7 @@ export class GitIntegration {
       const result = [];
       
       // Process working tree changes
-      for (const change of workingChanges) {
+      for (const change of workingChanges as Array<{ uri: vscode.Uri; status: number }>) {
         result.push({
           filePath: change.uri.fsPath,
           status: this.getGitStatusLabel(change.status),
@@ -116,7 +116,7 @@ export class GitIntegration {
       }
       
       // Process index changes
-      for (const change of indexChanges) {
+      for (const change of indexChanges as Array<{ uri: vscode.Uri; status: number }>) {
         result.push({
           filePath: change.uri.fsPath,
           status: this.getGitStatusLabel(change.status),

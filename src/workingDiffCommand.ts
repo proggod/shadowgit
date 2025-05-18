@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+// import * as fs from 'fs';
 import { ShadowGitWithGit } from './shadowGitWithGit';
 
 /**
@@ -39,7 +39,6 @@ export function createWorkingDiffCommand(
         const changes = await workingShadowGit.detectChanges(filePath);
         
         // Create temp files for diff
-        const gitFilePath = path.join(workingShadowGit.gitRepoDir, relativePath);
         const tempPath = workingShadowGit.createTempSnapshotFile(relativePath);
         
         progress.report({ message: "Opening diff view..." });

@@ -2,9 +2,14 @@
   "name": "shadow-git",
   "displayName": "Shadow Git",
   "description": "Virtual git layer for managing diffs without affecting the real repository",
+  "publisher": "ShadowGitTeam",
   "version": "0.2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ShadowGitTeam/shadowgit"
+  },
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.74.0"
   },
   "categories": [
     "SCM Providers",
@@ -14,7 +19,9 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
-  "extensionKind": ["workspace"],
+  "extensionKind": [
+    "workspace"
+  ],
   "contributes": {
     "commands": [
       {
@@ -111,8 +118,7 @@
       ]
     },
     "menus": {
-      "editor/title": [
-      ],
+      "editor/title": [],
       "view/title": [
         {
           "command": "shadowGit.createCheckpoint",
@@ -200,15 +206,21 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm-run-all -s check-types esbuild",
+    "compile": "npm-run-all -s check-types lint:warn esbuild",
+    "compile:quick": "npm-run-all -s check-types esbuild",
     "esbuild": "node esbuild.js",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch",
     "package": "npm-run-all -s check-types \"esbuild -- --production\"",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src --ext ts --max-warnings=0",
+    "lint:warn": "eslint src --ext ts --max-warnings=100",
+    "lint:report": "eslint src --ext ts",
+    "lint:fix": "eslint src --ext ts --fix",
     "test": "node ./test/runTest.js",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "build": "npx @vscode/vsce package",
+    "build:dev": "npx @vscode/vsce package --pre-release"
   },
   "devDependencies": {
     "@types/glob": "^7.1.3",
@@ -218,6 +230,7 @@
     "@typescript-eslint/eslint-plugin": "^4.26.0",
     "@typescript-eslint/parser": "^4.26.0",
     "@vscode/codicons": "^0.0.29",
+    "@vscode/vsce": "^2.32.0",
     "esbuild": "^0.25.4",
     "eslint": "^7.27.0",
     "glob": "^7.1.7",

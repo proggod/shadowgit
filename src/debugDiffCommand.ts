@@ -70,7 +70,7 @@ export function createDebugDiffCommand(context: vscode.ExtensionContext): vscode
       const state = repo.state;
       
       // Check if file is in working tree changes
-      const workingChange = state.workingTreeChanges.find((c: any) => 
+      const workingChange = state.workingTreeChanges.find((c: { uri: vscode.Uri }) => 
         c.uri.fsPath === uri.fsPath
       );
       
@@ -81,7 +81,7 @@ export function createDebugDiffCommand(context: vscode.ExtensionContext): vscode
       }
       
       // Check if file is in index changes
-      const indexChange = state.indexChanges.find((c: any) => 
+      const indexChange = state.indexChanges.find((c: { uri: vscode.Uri }) => 
         c.uri.fsPath === uri.fsPath
       );
       

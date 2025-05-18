@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+// import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as util from 'util';
@@ -92,7 +92,7 @@ export class GitUtils {
     } catch (error) {
       console.error(`Failed to commit changes: ${error}`);
       // Check if there's nothing to commit
-      if ((error as any).stderr && (error as any).stderr.includes('nothing to commit')) {
+      if ((error as Error & { stderr?: string }).stderr && (error as Error & { stderr?: string }).stderr?.includes('nothing to commit')) {
         console.log('Nothing to commit - all changes already committed');
         return '';
       }
@@ -229,7 +229,7 @@ export class GitUtils {
       console.error(`Failed to create diff for ${filePath}: ${error}`);
       
       // Check if error is related to new file (no HEAD yet)
-      if ((error as any).stderr && (error as any).stderr.includes('fatal: bad revision')) {
+      if ((error as Error & { stderr?: string }).stderr && (error as Error & { stderr?: string }).stderr?.includes('fatal: bad revision')) {
         // Fall back to showing the entire file as an addition
         try {
           // Get the file content

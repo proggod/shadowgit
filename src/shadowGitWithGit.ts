@@ -174,7 +174,10 @@ export class ShadowGitWithGit {
     let changeId = 0;
     
     // Get the current snapshot content
-    const snapshot = this.snapshots.get(relativePath)!;
+    const snapshot = this.snapshots.get(relativePath);
+    if (!snapshot) {
+      throw new Error(`No snapshot found for ${relativePath}`);
+    }
     const snapshotLines = snapshot.lines;
     
     // Read the current content from the Git repo

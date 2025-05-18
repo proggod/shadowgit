@@ -64,7 +64,7 @@ export class DiffDecorationProvider {
    * @param args - Command arguments
    * @returns GutterIcon decoration
    */
-  private createCommandGutterIcon(iconPath: string, command: string, args: any[]): vscode.DecorationRenderOptions {
+  private createCommandGutterIcon(iconPath: string): vscode.DecorationRenderOptions {
     // Note: VS Code API doesn't support gutterCommand directly
     // instead we use hover commands or context menu actions
     return {
@@ -131,7 +131,7 @@ export class DiffDecorationProvider {
               }
             }
             
-            if (found) break;
+            if (found) {break;}
           }
         }
         
@@ -143,10 +143,10 @@ export class DiffDecorationProvider {
           const filename = path.basename(editor.document.fileName);
           let foundByFilename = false;
           
-          this.diffEditors.forEach((changes, uri) => {
+          this.diffEditors.forEach((localChanges, uri) => {
             if (uri.endsWith(filename)) {
               console.log("Found editor by filename match: ${uri}");
-              this.diffEditors.set(editor.document.uri.toString(), changes);
+              this.diffEditors.set(editor.document.uri.toString(), localChanges);
               this.applyDecorations(editor);
               foundByFilename = true;
             }
@@ -155,9 +155,6 @@ export class DiffDecorationProvider {
           if (!foundByFilename) {
             // Log all registered diff editors
             console.log("Current editor is not in registered diff editors. Registered editors:");
-            this.diffEditors.forEach((changes, uri) => {
-              console.log("- ${uri} (${changes.length} changes)");
-            });
           }
         }
       }
@@ -215,13 +212,13 @@ export class DiffDecorationProvider {
             console.log("Checking visible editor after diff opened: ${editor.document.uri.toString()}");
             
             // Check all of our registered editors to see if any match
-            for (const [registeredUri, changes] of this.diffEditors.entries()) {
+            for (const [registeredUri, localChanges] of this.diffEditors.entries()) {
               // Check if the filename matches
               if (path.basename(registeredUri) === path.basename(editor.document.fileName)) {
                 console.log("Found matching file by basename: ${registeredUri} → ${editor.document.fileName}");
                 
                 // Register this new editor with those changes
-                this.diffEditors.set(editor.document.uri.toString(), changes);
+                this.diffEditors.set(editor.document.uri.toString(), localChanges);
                 this.applyDecorations(editor);
               }
             }
@@ -232,7 +229,7 @@ export class DiffDecorationProvider {
     
     // Listen for mouse hover in diff view
     vscode.languages.registerHoverProvider([{ scheme: 'file' }, { scheme: 'vscode-diff' }, { scheme: 'diff' }], {
-      provideHover: (document, position, token) => {
+      provideHover: (document, position) => {
         console.log("Hover detected at line ${position.line}, character ${position.character} in ${document.uri.toString()}");
         
         // Check if this document has changes registered
@@ -408,10 +405,6 @@ export class DiffDecorationProvider {
       this.diffEditors.set(diffUri, changes);
     }
     
-    // Apply decorations if this is the active editor
-    const editor = vscode.window.activeTextEditor;
-    console.log("Active editor is ${editor ? editor.document.fileName : 'none'}");
-    
     // Register a watcher for this file
     const watcher = vscode.workspace.createFileSystemWatcher(uri.fsPath);
     watcher.onDidChange(() => {
@@ -438,8 +431,8 @@ export class DiffDecorationProvider {
     console.log("Total visible editors: ${visibleEditors.length}");
     
     // Log all visible editors for debugging
-    visibleEditors.forEach((ed, index) => {
-      console.log("Editor ${index}: URI=${ed.document.uri.toString()}, Path=${ed.document.fileName}");
+    visibleEditors.forEach(() => {
+      console.log("Editor found");
     });
     
     // Try to find and decorate any matching editors (by URI or path)

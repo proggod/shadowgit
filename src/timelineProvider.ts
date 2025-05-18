@@ -33,7 +33,7 @@ interface TimelineOptions {
  */
 export class ShadowGitTimelineProvider {
   private readonly shadowGit: ShadowGit;
-  private _onDidChange = new vscode.EventEmitter<any>();
+  private _onDidChange = new vscode.EventEmitter<unknown>();
 
   /**
    * Event emitted when the timeline changes
@@ -57,8 +57,8 @@ export class ShadowGitTimelineProvider {
    */
   public async provideTimeline(
     uri: vscode.Uri,
-    options: TimelineOptions,
-    token: vscode.CancellationToken
+    _options: TimelineOptions,
+    _token: vscode.CancellationToken
   ): Promise<Timeline> {
     if (!this.shadowGit) {
       return { items: [] };

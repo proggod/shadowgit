@@ -1,0 +1,22 @@
+# Source code
+.vscode/
+.git/
+node_modules/
+out/
+src/
+tsconfig.json
+webpack.config.js
+.eslintrc.json
+.gitignore
+.claude/
+backups/
+.vscode-test/
+fix_*.sh
+comprehensive_fix.js
+esbuild_other.js
+cod_pack.json
+
+# Development scripts and configs
+*.log
+*.vsix
+**/.DS_Store

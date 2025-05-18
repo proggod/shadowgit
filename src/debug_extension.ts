@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-export function activate(context: vscode.ExtensionContext) {
+export function activate(context: vscode.ExtensionContext): void {
   console.log('Shadow Git is activating...');
   
   // Register a simple command for testing
@@ -13,6 +13,6 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('Shadow Git activated successfully!');
 }
 
-export function deactivate() {
+export function deactivate(): void {
   console.log('Shadow Git deactivated');
 }

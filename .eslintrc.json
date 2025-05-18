@@ -4,7 +4,8 @@
   "parserOptions": {
     "ecmaVersion": 2020,
     "sourceType": "module",
-    "project": "./tsconfig.json"
+    "project": "./tsconfig.json",
+    "createDefaultProgram": true
   },
   "plugins": [
     "@typescript-eslint"
@@ -44,11 +45,17 @@
     "curly": "warn",
     "eqeqeq": "warn",
     "no-throw-literal": "warn",
-    "semi": "off"
+    "semi": "off",
+    "@typescript-eslint/no-unused-vars": "warn",
+    "@typescript-eslint/no-explicit-any": "warn",
+    "@typescript-eslint/no-non-null-assertion": "warn",
+    "@typescript-eslint/explicit-module-boundary-types": "warn"
   },
   "ignorePatterns": [
     "out",
     "dist",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "src/complete_openShadowDiffCommand.ts",
+    "src/fixed_openShadowDiffCommand.ts"
   ]
 }

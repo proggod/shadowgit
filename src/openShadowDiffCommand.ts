@@ -126,8 +126,8 @@ export function createOpenDiffCommand(
         ];
         
         // Register all URI variants
-        for (const uri of rightUriVariations) {
-          console.log("Registering URI variant: ${uri}");
+        for (const _uri of rightUriVariations) {
+          console.log("Registering URI variant");
         }
         
         // Register with both providers
@@ -162,7 +162,7 @@ export function createOpenDiffCommand(
           });
           
           // Use standard diff command
-          const diffResult = await vscode.commands.executeCommand('vscode.diff', 
+          await vscode.commands.executeCommand('vscode.diff', 
             leftUri,
             rightUri,
             `Shadow Git Diff: ${path.basename(filePath)}`
@@ -202,7 +202,7 @@ export function createOpenDiffCommand(
         
         // Log all editors after opening the diff to see what type they are
         console.log('All editors after opening diff:');
-        vscode.window.visibleTextEditors.forEach((editor, index) => {
+        vscode.window.visibleTextEditors.forEach((editor) => {
           console.log("Editor ${index}:");
           console.log("- URI: ${editor.document.uri.toString()}");
           console.log("- Path: ${editor.document.fileName}");
@@ -218,7 +218,7 @@ export function createOpenDiffCommand(
         statusBarItem.show();
         
         // Register the command for the status bar item if not already registered
-        if (!context.subscriptions.find(d => (d as any)?.command === 'shadowGit.showApprovalOptions')) {
+        if (!context.subscriptions.find(d => (d as { command?: string })?.command === 'shadowGit.showApprovalOptions')) {
           context.subscriptions.push(vscode.commands.registerCommand('shadowGit.showApprovalOptions', async () => {
             const options = ['Approve All Changes', 'Disapprove All Changes'];
             const choice = await vscode.window.showQuickPick(options, { placeHolder: 'Choose an action' });

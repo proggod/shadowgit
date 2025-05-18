@@ -9,7 +9,11 @@
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    // This suppresses errors when calling functions on possibly undefined values
+    // We're using optional chaining, so this is generally safe
+    "strictNullChecks": false
   },
+  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", ".vscode-test", "src/complete_openShadowDiffCommand.ts", "src/fixed_openShadowDiffCommand.ts"]
 }

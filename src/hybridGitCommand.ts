@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { ShadowGit } from './shadowGit';
 import { ShadowGitWithGit } from './shadowGitWithGit';
+import { GitIntegration } from './gitIntegration';
 
 /**
  * A hybrid approach that uses real Git for staging/diff functionality
@@ -10,7 +11,9 @@ import { ShadowGitWithGit } from './shadowGitWithGit';
 export function createHybridGitCommand(
   context: vscode.ExtensionContext,
   mainShadowGit: ShadowGit,
-  workingShadowGit: ShadowGitWithGit | null
+  // Not currently used but kept for API consistency
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _workingShadowGit: ShadowGitWithGit | null
 ): vscode.Disposable {
   // Get output channel for logging
   const outputChannel = vscode.window.createOutputChannel('Shadow Git Hybrid');
@@ -80,8 +83,7 @@ export function createHybridGitCommand(
           }
         }
         
-        // Import GitIntegration
-        const { GitIntegration } = require('./gitIntegration');
+        // Use GitIntegration imported at the top of the file
         
         // Create a Git URI to use with VS Code's diff editor - using our improved method
         const gitUri = await GitIntegration.createGitDiffUri(uri);
@@ -98,7 +100,8 @@ export function createHybridGitCommand(
         );
         
         // Register a command that can be triggered after staging
-        if (!context.subscriptions.find(d => (d as any)._commandId === 'shadowGit.createCheckpointFromStaged')) {
+        // Using commandId instead of _commandId to follow naming conventions
+        if (!context.subscriptions.find(d => (d as { commandId?: string }).commandId === 'shadowGit.createCheckpointFromStaged')) {
           // Register a command to create a ShadowGit checkpoint from staged changes
           const createCheckpointCommand = vscode.commands.registerCommand(
             'shadowGit.createCheckpointFromStaged',
