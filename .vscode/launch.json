@@ -6,6 +6,19 @@
       "type": "extensionHost",
       "request": "launch",
       "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--disable-extensions"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "${defaultBuildTask}"
+    },
+    {
+      "name": "Run Extension (Keep Extensions)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [

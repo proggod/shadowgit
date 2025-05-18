@@ -2,7 +2,7 @@
   "name": "shadow-git",
   "displayName": "Shadow Git",
   "description": "Virtual git layer for managing diffs without affecting the real repository",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.60.0"
   },
@@ -14,23 +14,28 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "extensionKind": ["workspace"],
   "contributes": {
     "commands": [
       {
-        "command": "shadowGit.takeSnapshot",
-        "title": "Shadow Git: Take Snapshot (Both Systems)"
+        "command": "shadowGit.test",
+        "title": "Shadow Git: Test Command"
       },
       {
         "command": "shadowGit.takeMainSnapshot",
-        "title": "Shadow Git: Take Snapshot (Main System)"
+        "title": "Shadow Git: Take Checkpoint Snapshot"
       },
       {
         "command": "shadowGit.takeWorkingSnapshot",
-        "title": "Shadow Git: Take Snapshot (Working System)"
+        "title": "Shadow Git: Take Comparison Snapshot"
       },
       {
-        "command": "shadowGit.openDiff",
-        "title": "Shadow Git: Open Shadow Diff"
+        "command": "shadowGit.openMainDiff",
+        "title": "Shadow Git: Open Checkpoint Diff"
+      },
+      {
+        "command": "shadowGit.openWorkingDiff",
+        "title": "Shadow Git: Open Comparison Diff with Staging"
       },
       {
         "command": "shadowGit.approveChange",
@@ -46,7 +51,7 @@
       },
       {
         "command": "shadowGit.createWorkingCheckpoint",
-        "title": "Shadow Git: Create Working Checkpoint"
+        "title": "Shadow Git: Create Comparison Commit"
       },
       {
         "command": "shadowGit.approveAllChanges",
@@ -55,6 +60,18 @@
       {
         "command": "shadowGit.disapproveAllChanges",
         "title": "Shadow Git: Disapprove All Changes"
+      },
+      {
+        "command": "shadowGit.stageAll",
+        "title": "Shadow Git: Stage All Changes"
+      },
+      {
+        "command": "shadowGit.unstageAll",
+        "title": "Shadow Git: Unstage All Changes"
+      },
+      {
+        "command": "shadowGit.setBaseCommit",
+        "title": "Shadow Git: Set Base Commit for Comparisons"
       },
       {
         "command": "shadowGit.compareWithCheckpoint",
@@ -67,10 +84,6 @@
       {
         "command": "shadowGit.compareWithShadowGit",
         "title": "Shadow Git: Compare with Specific Shadow Git"
-      },
-      {
-        "command": "shadowGit.showChangeContextMenu",
-        "title": "Shadow Git: Show Change Context Menu"
       }
     ],
     "viewsContainers": {
@@ -85,53 +98,36 @@
     "views": {
       "shadow-git": [
         {
-          "id": "shadowGitMain",
-          "name": "Main Shadow Git",
-          "type": "webview"
-        },
-        {
-          "id": "shadowGitWorking",
-          "name": "Working Shadow Git",
+          "id": "shadowGitView",
+          "name": "Shadow Git",
           "type": "webview"
         }
       ],
       "scm": [
         {
           "id": "shadowGitSCM",
-          "name": "Shadow Git"
+          "name": "Shadow Git Checkpoints"
         }
       ]
     },
     "menus": {
       "editor/title": [
-        {
-          "command": "shadowGit.takeSnapshot",
-          "group": "navigation"
-        },
-        {
-          "command": "shadowGit.openDiff",
-          "group": "navigation"
-        },
-        {
-          "command": "shadowGit.compareWithShadowGit",
-          "group": "navigation"
-        }
       ],
       "view/title": [
         {
           "command": "shadowGit.createCheckpoint",
-          "when": "view == shadowGitMain",
+          "when": "view == shadowGitView",
           "group": "navigation"
         },
         {
           "command": "shadowGit.createWorkingCheckpoint",
-          "when": "view == shadowGitWorking",
+          "when": "view == shadowGitView",
           "group": "navigation"
         }
       ],
       "scm/resourceState/context": [
         {
-          "command": "shadowGit.openDiff",
+          "command": "shadowGit.openMainDiff",
           "when": "scmProvider =~ /shadowgit.*/",
           "group": "inline"
         },
@@ -181,14 +177,19 @@
     },
     "keybindings": [
       {
-        "command": "shadowGit.takeSnapshot",
+        "command": "shadowGit.takeMainSnapshot",
         "key": "ctrl+alt+s",
         "mac": "cmd+alt+s"
       },
       {
-        "command": "shadowGit.openDiff",
+        "command": "shadowGit.openMainDiff",
         "key": "ctrl+alt+d",
         "mac": "cmd+alt+d"
+      },
+      {
+        "command": "shadowGit.openWorkingDiff",
+        "key": "ctrl+alt+shift+d",
+        "mac": "cmd+alt+shift+d"
       },
       {
         "command": "shadowGit.createCheckpoint",

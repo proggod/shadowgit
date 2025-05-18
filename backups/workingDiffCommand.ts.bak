@@ -1,0 +1,373 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
+import { ShadowGitWithGit } from './shadowGitWithGit';
+
+/**
+ * Creates a command to open a diff view for Working Shadow Git with staging functionality
+ */
+export function createWorkingDiffCommand(
+  context: vscode.ExtensionContext,
+  workingShadowGit: ShadowGitWithGit
+): vscode.Disposable {
+  // Register as 'shadowGit.openWorkingDiff' - this will override any previous registration
+  return vscode.commands.registerCommand('shadowGit.openWorkingDiff', async (uri: vscode.Uri) => {
+    console.log('shadowGit.openWorkingDiff command invoked');
+    
+    if (!workingShadowGit) {
+      vscode.window.showErrorMessage('Working Shadow Git not initialized');
+      return;
+    }
+    
+    await vscode.window.withProgress({
+      location: vscode.ProgressLocation.Notification,
+      title: "Opening Working Git Diff",
+      cancellable: false
+    }, async (progress) => {
+      try {
+        const filePath = uri.fsPath;
+        const relativePath = path.relative(workingShadowGit.workspaceRoot, filePath);
+        
+        progress.report({ message: "Creating snapshot..." });
+        
+        // Take a snapshot if not already taken
+        if (!workingShadowGit.snapshots.has(relativePath)) {
+          await workingShadowGit.takeSnapshot(filePath);
+        }
+        
+        // Detect changes
+        const changes = await workingShadowGit.detectChanges(filePath);
+        
+        // Create temp files for diff
+        const gitFilePath = path.join(workingShadowGit.gitRepoDir, relativePath);
+        const tempPath = workingShadowGit.createTempSnapshotFile(relativePath);
+        
+        progress.report({ message: "Opening diff view..." });
+        
+        // Special diff implementation for working git with staging
+        // 1. First prepare the git repository (already done in detectChanges)
+        // 2. Use VS Code's built-in git diff functionality which has staging buttons
+        
+        // Create a panel for managing staging/unstaging
+        const panel = vscode.window.createWebviewPanel(
+          'workingGitDiff',
+          'Working Git Controls',
+          vscode.ViewColumn.Beside,
+          { enableScripts: true }
+        );
+        
+        // Create panel content with staging buttons
+        panel.webview.html = `
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Working Git Controls</title>
+            <style>
+              body { font-family: Arial, sans-serif; padding: 15px; color: var(--vscode-foreground); background-color: var(--vscode-editor-background); }
+              .button-container { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+              button { 
+                padding: 12px; 
+                font-size: 14px; 
+                cursor: pointer; 
+                background-color: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                border: none;
+                border-radius: 3px;
+              }
+              button:hover {
+                background-color: var(--vscode-button-hoverBackground);
+              }
+              h2, h3 { 
+                color: var(--vscode-editor-foreground);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                padding-bottom: 8px;
+              }
+              .change-item {
+                margin-bottom: 15px;
+                padding: 12px;
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 3px;
+              }
+              .change-item.staged {
+                border-left: 4px solid #4CAF50;
+              }
+              .change-item.unstaged {
+                border-left: 4px solid #F44336;
+              }
+              .status {
+                display: inline-block;
+                padding: 3px 8px;
+                border-radius: 3px;
+                font-size: 12px;
+                margin-left: 10px;
+              }
+              .status.staged {
+                background-color: rgba(76, 175, 80, 0.2);
+                color: #4CAF50;
+              }
+              .status.unstaged {
+                background-color: rgba(244, 67, 54, 0.2);
+                color: #F44336;
+              }
+              .stage-buttons {
+                display: flex;
+                gap: 10px;
+                margin-top: 10px;
+              }
+              .image-button {
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+              }
+              .image-button img {
+                width: 16px;
+                height: 16px;
+              }
+            </style>
+          </head>
+          <body>
+            <h2>Working Git Controls</h2>
+            <p>Manage changes in your file using Git-style staging:</p>
+            
+            <div class="button-container">
+              <button id="stageAll">Stage All Changes</button>
+              <button id="unstageAll">Unstage All Changes</button>
+              <button id="createCommit">Create Commit</button>
+            </div>
+            
+            <h3>Changes in ${path.basename(filePath)}</h3>
+            <div id="changes">
+              ${changes.map((change, index) => `
+                <div class="change-item ${change.approved ? 'staged' : 'unstaged'}" data-id="${change.id}">
+                  <p>
+                    <strong>Change ${index+1}</strong> (Line ${change.startLine}-${change.endLine})
+                    <span class="status ${change.approved ? 'staged' : 'unstaged'}">
+                      ${change.approved ? 'Staged' : 'Unstaged'}
+                    </span>
+                  </p>
+                  <p>Type: ${change.type}</p>
+                  <div class="stage-buttons">
+                    ${change.approved ? 
+                      `<button class="unstage-button" data-id="${change.id}">Unstage Change</button>` : 
+                      `<button class="stage-button" data-id="${change.id}">Stage Change</button>`
+                    }
+                  </div>
+                </div>
+              ").join('')}
+            </div>
+            
+            <script>
+              const vscode = acquireVsCodeApi();
+              
+              // Stage all changes
+              document.getElementById('stageAll').addEventListener('click', () => {
+                vscode.postMessage({
+                  command: 'stageAll',
+                  filepath: '${uri.fsPath}'
+                });
+              });
+              
+              // Unstage all changes
+              document.getElementById('unstageAll').addEventListener('click', () => {
+                vscode.postMessage({
+                  command: 'unstageAll',
+                  filepath: '${uri.fsPath}'
+                });
+              });
+              
+              // Create commit
+              document.getElementById('createCommit').addEventListener('click', () => {
+                vscode.postMessage({
+                  command: 'createCommit'
+                });
+              });
+              
+              // Stage individual changes
+              document.querySelectorAll('.stage-button').forEach(button => {
+                button.addEventListener('click', () => {
+                  const changeId = button.getAttribute('data-id');
+                  vscode.postMessage({
+                    command: 'stage',
+                    changeId: changeId,
+                    filepath: '${uri.fsPath}'
+                  });
+                });
+              });
+              
+              // Unstage individual changes
+              document.querySelectorAll('.unstage-button').forEach(button => {
+                button.addEventListener('click', () => {
+                  const changeId = button.getAttribute('data-id');
+                  vscode.postMessage({
+                    command: 'unstage',
+                    changeId: changeId,
+                    filepath: '${uri.fsPath}'
+                  });
+                });
+              });
+            </script>
+          </body>
+          </html>
+        `;
+        
+        // Handle messages from the webview
+        panel.webview.onDidReceiveMessage(async message => {
+          console.log("Received message from working git webview: ${JSON.stringify(message)}");
+          
+          try {
+            if (message.command === 'stageAll') {
+              await workingShadowGit.approveAllChanges(message.filepath);
+              vscode.window.showInformationMessage('All changes staged');
+            } 
+            else if (message.command === 'unstageAll') {
+              await workingShadowGit.disapproveAllChanges(message.filepath);
+              vscode.window.showInformationMessage('All changes unstaged');
+            }
+            else if (message.command === 'stage') {
+              await workingShadowGit.approveChange(message.filepath, Number(message.changeId));
+              vscode.window.showInformationMessage('Change staged');
+            }
+            else if (message.command === 'unstage') {
+              await workingShadowGit.disapproveChange(message.filepath, Number(message.changeId));
+              vscode.window.showInformationMessage('Change unstaged');
+            }
+            else if (message.command === 'createCommit') {
+              // Show input box for commit message
+              const commitMessage = await vscode.window.showInputBox({
+                prompt: 'Enter commit message',
+                placeHolder: 'What changes does this commit include?'
+              });
+              
+              if (commitMessage) {
+                await workingShadowGit.createCheckpoint(commitMessage);
+                vscode.window.showInformationMessage('Commit created successfully');
+              }
+            }
+            
+            // Update the webview with fresh data
+            const updatedChanges = await workingShadowGit.detectChanges(message.filepath);
+            updateWebviewContent(panel, updatedChanges, uri.fsPath);
+            
+          } catch (error) {
+            vscode.window.showErrorMessage(`Error: ${(error as Error).message}");
+          }
+        });
+        
+        // Show the diff view
+        await vscode.commands.executeCommand('vscode.diff', 
+          vscode.Uri.file(tempPath),
+          uri,
+          `Working Git Diff: ${path.basename(filePath)} (Use panel for staging)`
+        );
+        
+        progress.report({ message: "Diff view opened successfully" });
+        
+      } catch (error) {
+        console.error(`Failed to open working diff: ${error}");
+        vscode.window.showErrorMessage(`Failed to open diff: ${(error as Error).message}");
+      }
+    });
+  });
+}
+
+/**
+ * Updates the webview content with fresh change data
+ */
+function updateWebviewContent(
+  panel: vscode.WebviewPanel,
+  changes: any[],
+  filePath: string
+): void {
+  const changesHtml = `
+    <div id="changes">
+      ${changes.map((change, index) => `
+        <div class="change-item ${change.approved ? 'staged' : 'unstaged'}" data-id="${change.id}">
+          <p>
+            <strong>Change ${index+1}</strong> (Line ${change.startLine}-${change.endLine})
+            <span class="status ${change.approved ? 'staged' : 'unstaged'}">
+              ${change.approved ? 'Staged' : 'Unstaged'}
+            </span>
+          </p>
+          <p>Type: ${change.type}</p>
+          <div class="stage-buttons">
+            ${change.approved ? 
+              `<button class="unstage-button" data-id="${change.id}">Unstage Change</button>` : 
+              `<button class="stage-button" data-id="${change.id}">Stage Change</button>`
+            }
+          </div>
+        </div>
+      ").join('')}
+    </div>
+  `;
+  
+  // Replace the changes section in the webview HTML
+  const currentHtml = panel.webview.html;
+  const newHtml = currentHtml.replace(
+    /<div id="changes">[\s\S]*?<\/div>/,
+    changesHtml
+  );
+  
+  panel.webview.html = newHtml;
+  
+  // Re-attach event listeners
+  const script = `
+    <script>
+      const vscode = acquireVsCodeApi();
+      
+      // Stage all changes
+      document.getElementById('stageAll').addEventListener('click', () => {
+        vscode.postMessage({
+          command: 'stageAll',
+          filepath: '${filePath}'
+        });
+      });
+      
+      // Unstage all changes
+      document.getElementById('unstageAll').addEventListener('click', () => {
+        vscode.postMessage({
+          command: 'unstageAll',
+          filepath: '${filePath}'
+        });
+      });
+      
+      // Create commit
+      document.getElementById('createCommit').addEventListener('click', () => {
+        vscode.postMessage({
+          command: 'createCommit'
+        });
+      });
+      
+      // Stage individual changes
+      document.querySelectorAll('.stage-button').forEach(button => {
+        button.addEventListener('click', () => {
+          const changeId = button.getAttribute('data-id');
+          vscode.postMessage({
+            command: 'stage',
+            changeId: changeId,
+            filepath: '${filePath}'
+          });
+        });
+      });
+      
+      // Unstage individual changes
+      document.querySelectorAll('.unstage-button').forEach(button => {
+        button.addEventListener('click', () => {
+          const changeId = button.getAttribute('data-id');
+          vscode.postMessage({
+            command: 'unstage',
+            changeId: changeId,
+            filepath: '${filePath}'
+          });
+        });
+      });
+    </script>
+  `;
+  
+  // Add the script back in
+  panel.webview.html = panel.webview.html.replace(
+    /<script>[\s\S]*?<\/script>/,
+    script
+  );
+}

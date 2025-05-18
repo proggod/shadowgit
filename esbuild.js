@@ -28,7 +28,9 @@ async function main() {
   // Build extension (Node.js environment)
   const extensionCtx = await esbuild.context({
     entryPoints: [
-      'src/extension.ts'
+      'src/extension.ts',
+      'src/enhancedExtension.ts',
+      'src/debug_extension.ts'
     ],
     bundle: true,
     format: 'cjs',
@@ -36,7 +38,7 @@ async function main() {
     sourcemap: !production,
     sourcesContent: false,
     platform: 'node',
-    outfile: 'dist/extension.js',
+    outdir: 'dist', // Changed to outdir instead of outfile to support multiple entry points
     external: ['vscode'], // Only exclude vscode, include all other dependencies
     logLevel: 'silent',
     plugins: [

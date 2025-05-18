@@ -11,5 +11,5 @@
     "noFallthroughCasesInSwitch": true,
     "esModuleInterop": true
   },
-  "exclude": ["node_modules", ".vscode-test"]
+  "exclude": ["node_modules", ".vscode-test", "src/complete_openShadowDiffCommand.ts", "src/fixed_openShadowDiffCommand.ts"]
 }

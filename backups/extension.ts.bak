@@ -382,7 +382,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         
         // Show success message
         if (fileCount > 0) {
-          vscode.window.showInformationMessage(`Snapshots taken of ${fileCount} files`);
+          vscode.window.showInformationMessage(`Snapshots taken of ${fileCount} files");
         } else {
           vscode.window.showInformationMessage('No new snapshots taken');
         }
@@ -417,7 +417,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       const fileName = path.basename(filePath);
       
-      vscode.window.showInformationMessage(`Snapshot taken in Working system: ${fileName}`);
+      vscode.window.showInformationMessage(`Snapshot taken in Working system: ${fileName}");
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to take snapshot: ${(error as Error).message}`);
     }
@@ -438,10 +438,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Use the simple diff command implementation
       mainDiffCommands = createSimpleDiffCommand(context, mainShadowGit, workingShadowGit!);
       
-      outputChannel.appendLine(`Created ${mainDiffCommands.length} diff commands`);
+      outputChannel.appendLine(`Created ${mainDiffCommands.length} diff commands");
       console.log("SHADOW_GIT_DEBUG: Created ${mainDiffCommands.length} diff commands");
     } catch (error) {
-      outputChannel.appendLine(`Error creating diff commands: ${error}`);
+      outputChannel.appendLine(`Error creating diff commands: ${error}");
       console.error('SHADOW_GIT_DEBUG: Error creating diff commands:', error);
     }
   }
@@ -456,7 +456,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Pass along the commit parameter if provided
       await vscode.commands.executeCommand('shadowGit.openDirectGitDiff', uri, commit);
     } catch (error) {
-      outputChannel.appendLine(`Error in openWorkingDiff: ${error}`);
+      outputChannel.appendLine(`Error in openWorkingDiff: ${error}");
       console.error('Error in openWorkingDiff:', error);
       
       // Try hybrid approach as first fallback
@@ -483,7 +483,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     
     if (!targetShadowGit) {
-      vscode.window.showErrorMessage(`Checkpoint ${checkpointId} not found`);
+      vscode.window.showErrorMessage(`Checkpoint ${checkpointId} not found");
       return;
     }
     
@@ -496,7 +496,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       // Only continue if the checkpoint affected this file
       if (!checkpoint.changes[relativePath]) {
-        vscode.window.showInformationMessage(`Checkpoint ${checkpointId.substring(0, 8)} does not affect this file`);
+        vscode.window.showInformationMessage(`Checkpoint ${checkpointId.substring(0, 8)} does not affect this file");
         return;
       }
       
@@ -541,7 +541,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         .sort((a, b) => b.timestamp - a.timestamp);
       
       if (checkpoints.length === 0) {
-        vscode.window.showInformationMessage(`No checkpoints found for this file in ${shadowGitType} Shadow Git`);
+        vscode.window.showInformationMessage(`No checkpoints found for this file in ${shadowGitType} Shadow Git");
         return;
       }
       
@@ -631,7 +631,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // VS Code's built-in Git integration provides better diff decorations with staging icons
       
     } catch (error) {
-      vscode.window.showErrorMessage(`Error: ${(error as Error).message}`);
+      vscode.window.showErrorMessage(`Error: ${(error as Error).message}");
     }
   });
   
@@ -680,7 +680,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (success) {
         mainDiffDecorationProvider!.refreshDecorations(uri);
         mainSCMProvider?.update();
-        vscode.window.showInformationMessage(`Change disapproved`);
+        vscode.window.showInformationMessage(`Change disapproved");
       } else {
         vscode.window.showErrorMessage(`Change not found: ${changeId}`);
       }
@@ -765,7 +765,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           '**/{node_modules,.git,.vscode,.vscode-insiders,dist,build}/**' // Exclude common directories
         );
         
-        outputChannel.appendLine(`Found ${files.length} files in project`);
+        outputChannel.appendLine(`Found ${files.length} files in project");
         console.log("SHADOW_GIT_DEBUG: Found ${files.length} files in project");
         
         // Take snapshots of all files
@@ -797,7 +797,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           }
         }
         
-        outputChannel.appendLine(`Processed ${processedCount} files for checkpoint`);
+        outputChannel.appendLine(`Processed ${processedCount} files for checkpoint");
         console.log("SHADOW_GIT_DEBUG: Processed ${processedCount} files for checkpoint");
       });
       
@@ -812,7 +812,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       
       // Create the checkpoint
-      outputChannel.appendLine(`Creating checkpoint with message: ${message}`);
+      outputChannel.appendLine(`Creating checkpoint with message: ${message}");
       console.log("SHADOW_GIT_DEBUG: Creating checkpoint with message: ${message}");
       
       const checkpoint = mainShadowGit.createCheckpoint(message);
@@ -821,8 +821,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const filesCount = Object.keys(checkpoint.changes).length;
       const filesList = Object.keys(checkpoint.changes).join(', ');
       
-      outputChannel.appendLine(`Created checkpoint ${checkpoint.id} with message "${message}"`);
-      outputChannel.appendLine(`Checkpoint contains ${filesCount} files: ${filesList}`);
+      outputChannel.appendLine(`Created checkpoint ${checkpoint.id} with message "${message}"");
+      outputChannel.appendLine(`Checkpoint contains ${filesCount} files: ${filesList}");
       console.log("SHADOW_GIT_DEBUG: Created checkpoint with ${filesCount} files: ${filesList}");
       
       // More descriptive success message
@@ -833,11 +833,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Refresh WebView - first try through commands
       try {
         // Force refresh the WebView
-        outputChannel.appendLine(`Refreshing WebView after checkpoint creation`);
+        outputChannel.appendLine(`Refreshing WebView after checkpoint creation");
         await vscode.commands.executeCommand('workbench.view.extension.shadowGitView');
         await vscode.commands.executeCommand('shadowGit.refresh');
       } catch (refreshError) {
-        outputChannel.appendLine(`Error refreshing view: ${refreshError}`);
+        outputChannel.appendLine(`Error refreshing view: ${refreshError}");
       }
       
       // Refresh everything
@@ -868,7 +868,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
       
       const checkpoint = await workingShadowGit.createCheckpoint(message);
-      vscode.window.showInformationMessage(`Working checkpoint created: ${checkpoint.id.substring(0, 8)}`);
+      vscode.window.showInformationMessage(`Working checkpoint created: ${checkpoint.id.substring(0, 8)}");
       
       // Refresh everything
       // No UI to refresh since we're not using working view/SCM providers
@@ -883,15 +883,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   
   // Command: Delete a checkpoint
   const deleteCheckpointCommand = vscode.commands.registerCommand('shadowGit.deleteCheckpoint', async (checkpointId: string) => {
-    outputChannel.appendLine(`deleteCheckpoint command invoked for checkpoint ${checkpointId}`);
-    console.log(`SHADOW_GIT_DEBUG: deleteCheckpoint command invoked for checkpoint ${checkpointId}`);
-    console.log(`SHADOW_GIT_DEBUG: Checkpoint ID type: ${typeof checkpointId}, value: "${checkpointId}"`);
+    outputChannel.appendLine(`deleteCheckpoint command invoked for checkpoint ${checkpointId}");
+    console.log("SHADOW_GIT_DEBUG: deleteCheckpoint command invoked for checkpoint ${checkpointId}");
+    console.log("SHADOW_GIT_DEBUG: Checkpoint ID type: ${typeof checkpointId}, value: "${checkpointId}"");
     
     // Extra validation for the checkpoint ID
     if (!checkpointId || typeof checkpointId !== 'string') {
       const errorMsg = `Invalid checkpoint ID: ${checkpointId}`;
       outputChannel.appendLine(errorMsg);
-      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}`);
+      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}");
       vscode.window.showErrorMessage(errorMsg);
       return;
     }
@@ -915,7 +915,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       if (foundCheckpoint) {
         targetShadowGit = mainShadowGit;
-        outputChannel.appendLine(`Found checkpoint in main ShadowGit instance: ${foundCheckpoint.id}`);
+        outputChannel.appendLine(`Found checkpoint in main ShadowGit instance: ${foundCheckpoint.id}");
         console.log("SHADOW_GIT_DEBUG: Found checkpoint in main ShadowGit instance: ${foundCheckpoint.id}");
       }
     }
@@ -932,7 +932,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       
       if (foundCheckpoint) {
         targetShadowGit = workingShadowGit as any;
-        outputChannel.appendLine(`Found checkpoint in working ShadowGit instance: ${foundCheckpoint.id}`);
+        outputChannel.appendLine(`Found checkpoint in working ShadowGit instance: ${foundCheckpoint.id}");
         console.log("SHADOW_GIT_DEBUG: Found checkpoint in working ShadowGit instance: ${foundCheckpoint.id}");
       }
     }
@@ -940,7 +940,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (!targetShadowGit || !foundCheckpoint) {
       const errorMsg = `Checkpoint ${cleanCheckpointId} not found`;
       outputChannel.appendLine(errorMsg);
-      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}`);
+      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}");
       vscode.window.showErrorMessage(errorMsg);
       return;
     }
@@ -958,7 +958,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
       
       if (confirmDelete !== 'Delete') {
-        outputChannel.appendLine(`User cancelled checkpoint deletion`);
+        outputChannel.appendLine(`User cancelled checkpoint deletion");
         console.log("SHADOW_GIT_DEBUG: User cancelled checkpoint deletion");
         return; // User cancelled
       }
@@ -968,8 +968,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const success = targetShadowGit.deleteCheckpoint(actualCheckpointId);
       
       if (success) {
-        vscode.window.showInformationMessage(`Checkpoint "${message}" (${actualCheckpointId.substring(0, 8)}) was deleted successfully.`);
-        outputChannel.appendLine(`Checkpoint deleted successfully`);
+        vscode.window.showInformationMessage(`Checkpoint "${message}" (${actualCheckpointId.substring(0, 8)}) was deleted successfully.");
+        outputChannel.appendLine(`Checkpoint deleted successfully");
         console.log("SHADOW_GIT_DEBUG: Checkpoint deleted successfully");
         
         // Refresh everything
@@ -1000,20 +1000,20 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       } else {
         const errorMsg = `Failed to delete checkpoint "${message}" (${actualCheckpointId.substring(0, 8)})`;
         outputChannel.appendLine(errorMsg);
-        console.error(`SHADOW_GIT_DEBUG: ${errorMsg}`);
+        console.error(`SHADOW_GIT_DEBUG: ${errorMsg}");
         vscode.window.showErrorMessage(errorMsg);
       }
     } catch (error) {
       const errorMsg = `Failed to delete checkpoint: ${(error as Error).message}`;
       outputChannel.appendLine(errorMsg);
-      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}`);
+      console.error(`SHADOW_GIT_DEBUG: ${errorMsg}");
       vscode.window.showErrorMessage(errorMsg);
     }
   });
   
   // Command: Apply a checkpoint
   const applyCheckpointCommand = vscode.commands.registerCommand('shadowGit.applyCheckpoint', async (checkpointId: string) => {
-    outputChannel.appendLine(`applyCheckpoint command invoked for checkpoint ${checkpointId}`);
+    outputChannel.appendLine(`applyCheckpoint command invoked for checkpoint ${checkpointId}");
     console.log("SHADOW_GIT_DEBUG: applyCheckpoint command invoked for checkpoint ${checkpointId}");
     
     // Determine which ShadowGit instance has this checkpoint
@@ -1021,11 +1021,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     
     if (mainShadowGit && mainShadowGit.checkpoints.find(cp => cp.id === checkpointId)) {
       targetShadowGit = mainShadowGit;
-      outputChannel.appendLine(`Found checkpoint in main ShadowGit instance`);
+      outputChannel.appendLine(`Found checkpoint in main ShadowGit instance");
       console.log("SHADOW_GIT_DEBUG: Found checkpoint in main ShadowGit instance");
     } else if (workingShadowGit && workingShadowGit.checkpoints.find(cp => cp.id === checkpointId)) {
       targetShadowGit = workingShadowGit as any;
-      outputChannel.appendLine(`Found checkpoint in working ShadowGit instance`);
+      outputChannel.appendLine(`Found checkpoint in working ShadowGit instance");
       console.log("SHADOW_GIT_DEBUG: Found checkpoint in working ShadowGit instance");
     }
     
@@ -1042,7 +1042,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const checkpoint = targetShadowGit.checkpoints.find(cp => cp.id === checkpointId)!;
       const affectedFiles = Object.keys(checkpoint.changes);
       
-      outputChannel.appendLine(`Checkpoint will restore ${affectedFiles.length} files: ${affectedFiles.join(', ')}`);
+      outputChannel.appendLine(`Checkpoint will restore ${affectedFiles.length} files: ${affectedFiles.join(', ')}");
       console.log("SHADOW_GIT_DEBUG: Checkpoint will restore ${affectedFiles.length} files: ${affectedFiles.join(', ')}");
       
       const confirmApply = await vscode.window.showWarningMessage(
@@ -1052,12 +1052,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       );
       
       if (confirmApply !== 'Restore') {
-        outputChannel.appendLine(`User cancelled checkpoint restore`);
+        outputChannel.appendLine(`User cancelled checkpoint restore");
         console.log("SHADOW_GIT_DEBUG: User cancelled checkpoint restore");
         return; // User cancelled
       }
       
-      outputChannel.appendLine(`Applying checkpoint ${checkpointId}`);
+      outputChannel.appendLine(`Applying checkpoint ${checkpointId}");
       console.log("SHADOW_GIT_DEBUG: Applying checkpoint ${checkpointId}");
       
       // Show progress indicator while applying checkpoint
@@ -1078,19 +1078,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         `Checkpoint "${checkpoint.message}" (${checkpointId.substring(0, 8)}) successfully restored. ${affectedFiles.length} files were restored.`
       );
       
-      outputChannel.appendLine(`Checkpoint applied successfully, restored ${affectedFiles.length} files`);
+      outputChannel.appendLine(`Checkpoint applied successfully, restored ${affectedFiles.length} files");
       console.log("SHADOW_GIT_DEBUG: Checkpoint applied successfully, restored ${affectedFiles.length} files");
       
       // Attempt to open one of the restored files to confirm changes
       if (affectedFiles.length > 0) {
         try {
           const firstFile = path.join(targetShadowGit.workspaceRoot, affectedFiles[0]);
-          outputChannel.appendLine(`Opening restored file for confirmation: ${firstFile}`);
+          outputChannel.appendLine(`Opening restored file for confirmation: ${firstFile}");
           const document = await vscode.workspace.openTextDocument(firstFile);
           await vscode.window.showTextDocument(document);
-          outputChannel.appendLine(`Successfully opened restored file: ${firstFile}`);
+          outputChannel.appendLine(`Successfully opened restored file: ${firstFile}");
         } catch (err) {
-          outputChannel.appendLine(`Failed to open restored file for confirmation: ${err}`);
+          outputChannel.appendLine(`Failed to open restored file for confirmation: ${err}");
         }
       }
       
@@ -1125,10 +1125,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     
     try {
       // Get the workspace root
-      if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage('No workspace folder open');
-        return;
-      }
       const workspaceRoot = vscode.workspace.workspaceFolders[0].uri.fsPath;
       console.log('Workspace root:', workspaceRoot);
       
@@ -1186,7 +1182,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       vscode.commands.executeCommand('shadowGit.refresh');
     } catch (error) {
       console.error('Error deleting checkpoint:', error);
-      vscode.window.showErrorMessage(`Manual deletion failed: ${error instanceof Error ? error.message : String(error)}`);
+      vscode.window.showErrorMessage(`Manual deletion failed: ${error.message}`);
     }
   });
   
@@ -1241,7 +1237,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // Show confirmation
       vscode.window.showInformationMessage('ShadowGit refreshed');
     } catch (error) {
-      outputChannel.appendLine(`Error during refresh: ${error}`);
+      outputChannel.appendLine(`Error during refresh: ${error}");
       console.error('SHADOW_GIT_DEBUG: Error during refresh', error);
     }
   });

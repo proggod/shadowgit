@@ -305,27 +305,27 @@ export class DiffDecorationProvider {
 
         // Create hover message with action buttons
         const hoverMessage = new vscode.MarkdownString();
-        hoverMessage.appendMarkdown(`**Change ID:** ${change.id}\n\n`);
-        hoverMessage.appendMarkdown(`**Type:** ${change.type}\n\n`);
-        hoverMessage.appendMarkdown(`**Status:** ${change.approved ? 'Approved' : (change.approved === false ? 'Disapproved' : 'Pending')}\n\n`);
+        hoverMessage.appendMarkdown(`**Change ID:** ${change.id}\n\n");
+        hoverMessage.appendMarkdown(`**Type:** ${change.type}\n\n");
+        hoverMessage.appendMarkdown(`**Status:** ${change.approved ? 'Approved' : (change.approved === false ? 'Disapproved' : 'Pending')}\n\n");
         
         // Add approve/disapprove buttons
-        hoverMessage.appendMarkdown(`---\n\n`);
+        hoverMessage.appendMarkdown(`---\n\n");
         // Important: VS Code expects a specific format for command URIs in hover
         // We need to manually create the correct URI format
         const approveArgs = JSON.stringify([document.uri, change.id]);
         const disapproveArgs = JSON.stringify([document.uri, change.id]);
         console.log("Approve args: ${approveArgs}");
         
-        hoverMessage.appendMarkdown(`[Approve](command:shadowGit.approveChange?${encodeURIComponent(approveArgs)})`);
-        hoverMessage.appendMarkdown(` | `);
-        hoverMessage.appendMarkdown(`[Disapprove](command:shadowGit.disapproveChange?${encodeURIComponent(disapproveArgs)})`);
+        hoverMessage.appendMarkdown(`[Approve](command:shadowGit.approveChange?${encodeURIComponent(approveArgs)})");
+        hoverMessage.appendMarkdown(` | ");
+        hoverMessage.appendMarkdown(`[Disapprove](command:shadowGit.disapproveChange?${encodeURIComponent(disapproveArgs)})");
         
         // Make sure command URIs are enabled
         hoverMessage.isTrusted = true;
         
         // Also add the direct command text for debugging
-        hoverMessage.appendMarkdown(`\n\n---\n\nDebug info: \`shadowGit.approveChange(${document.uri.toString()}, ${change.id})\``);
+        hoverMessage.appendMarkdown(`\n\n---\n\nDebug info: \`shadowGit.approveChange(${document.uri.toString()}, ${change.id})\`");
         
         
         console.log("Returning hover with commands for change ${change.id}");
@@ -576,15 +576,15 @@ export class DiffDecorationProvider {
       
       // Create hover message
       const hoverMessage = new vscode.MarkdownString();
-      hoverMessage.appendMarkdown(`**Change ID:** ${change.id}\n\n`);
-      hoverMessage.appendMarkdown(`**Type:** ${change.type}\n\n`);
-      hoverMessage.appendMarkdown(`**Status:** ${change.approved ? 'Approved' : (change.approved === false ? 'Disapproved' : 'Pending')}\n\n`);
+      hoverMessage.appendMarkdown(`**Change ID:** ${change.id}\n\n");
+      hoverMessage.appendMarkdown(`**Type:** ${change.type}\n\n");
+      hoverMessage.appendMarkdown(`**Status:** ${change.approved ? 'Approved' : (change.approved === false ? 'Disapproved' : 'Pending')}\n\n");
       
       // Add approve/disapprove buttons (only one set)
-      hoverMessage.appendMarkdown(`---\n\n`);
-      hoverMessage.appendMarkdown(`[Approve](command:shadowGit.approveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`);
-      hoverMessage.appendMarkdown(` | `);
-      hoverMessage.appendMarkdown(`[Disapprove](command:shadowGit.disapproveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})`);
+      hoverMessage.appendMarkdown(`---\n\n");
+      hoverMessage.appendMarkdown(`[Approve](command:shadowGit.approveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})");
+      hoverMessage.appendMarkdown(` | ");
+      hoverMessage.appendMarkdown(`[Disapprove](command:shadowGit.disapproveChange?${encodeURIComponent(JSON.stringify([editor.document.uri, change.id]))})");
       
       // Make sure command URIs are enabled
       hoverMessage.isTrusted = true;
@@ -683,24 +683,24 @@ export class DiffDecorationProvider {
       editor.setDecorations(this.decorationTypes.pendingDeletion, pendingDeletions);
       
       // Gutter decorations
-      console.log(`Applying ${stageGutter.length} stage gutter decorations`);
-      console.log(`Applying ${disapproveGutter.length} disapprove gutter decorations`);
+      console.log("Applying ${stageGutter.length} stage gutter decorations");
+      console.log("Applying ${disapproveGutter.length} disapprove gutter decorations");
       
       // Log sample ranges
       if (stageGutter.length > 0) {
-        console.log(`Sample stage gutter range: ${JSON.stringify({
+        console.log("Sample stage gutter range: ${JSON.stringify({
           start: {line: stageGutter[0].range.start.line, character: stageGutter[0].range.start.character},
           end: {line: stageGutter[0].range.end.line, character: stageGutter[0].range.end.character}
-        })}`);
+        })}");
       }
       
       editor.setDecorations(this.decorationTypes.stageGutter, stageGutter);
       editor.setDecorations(this.decorationTypes.disapproveGutter, disapproveGutter);
       editor.setDecorations(this.decorationTypes.changeBlock, blockDecorations);
       
-      console.log(`All decorations applied successfully`);
+      console.log("All decorations applied successfully");
     } catch (error) {
-      console.log(`Error applying decorations: ${error}`);
+      console.log("Error applying decorations: ${error}");
     }
     
     console.log('Decorations applied');

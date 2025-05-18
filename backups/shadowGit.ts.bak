@@ -327,7 +327,7 @@ export class ShadowGit {
    * @returns The checkpoint object
    */
   public createCheckpoint(message: string): Checkpoint {
-    console.log(`ShadowGit.createCheckpoint: Creating checkpoint with message "${message}"`);
+    console.log("ShadowGit.createCheckpoint: Creating checkpoint with message "${message}"");
     
     // Check all open files for changes first
     this.detectChangesInAllTrackedFiles();
@@ -429,11 +429,11 @@ export class ShadowGit {
     
     const checkpoint = this.checkpoints.find(cp => cp.id === checkpointId);
     if (!checkpoint) {
-      console.error(`ShadowGit.applyCheckpoint: Checkpoint ${checkpointId} not found`);
-      throw new Error(`Checkpoint ${checkpointId} not found`);
+      console.error(`ShadowGit.applyCheckpoint: Checkpoint ${checkpointId} not found");
+      throw new Error(`Checkpoint ${checkpointId} not found");
     }
     
-    console.log(`ShadowGit.applyCheckpoint: Found checkpoint "${checkpoint.message}" with ${Object.keys(checkpoint.changes).length} files to restore`);
+    console.log("ShadowGit.applyCheckpoint: Found checkpoint "${checkpoint.message}" with ${Object.keys(checkpoint.changes).length} files to restore");
     
     // Apply changes from the checkpoint
     const restoredFiles = [];
@@ -450,7 +450,7 @@ export class ShadowGit {
         const snapshot = this.findSnapshotForFile(relativePath);
         
         if (!snapshot) {
-          console.warn(`ShadowGit.applyCheckpoint: No snapshot found for ${relativePath}, skipping`);
+          console.warn(`ShadowGit.applyCheckpoint: No snapshot found for ${relativePath}, skipping");
           continue;
         }
         
@@ -605,7 +605,7 @@ export class ShadowGit {
    */
   private saveChanges(relativePath: string, changes: Change[]): void {
     try {
-      const changesPath = path.join(this.shadowDir, 'changes', `${relativePath}.json`);
+      const changesPath = path.join(this.shadowDir, 'changes', `${relativePath}.json");
       
       // Ensure directory exists
       const dir = path.dirname(changesPath);
@@ -654,7 +654,7 @@ export class ShadowGit {
    */
   private saveCheckpoint(checkpoint: Checkpoint): void {
     try {
-      const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpoint.id}.json`);
+      const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpoint.id}.json");
       fs.writeFileSync(checkpointPath, JSON.stringify(checkpoint, null, 2));
     } catch (error) {
       console.error(`Failed to save checkpoint ${checkpoint.id}:`, error);
@@ -689,7 +689,7 @@ export class ShadowGit {
     const checkpointIndex = this.checkpoints.findIndex(cp => cp.id === checkpointId);
     
     if (checkpointIndex === -1) {
-      console.error(`ShadowGit.deleteCheckpoint: Checkpoint ${checkpointId} not found`);
+      console.error(`ShadowGit.deleteCheckpoint: Checkpoint ${checkpointId} not found");
       return false;
     }
     
@@ -698,12 +698,12 @@ export class ShadowGit {
       this.checkpoints.splice(checkpointIndex, 1);
       
       // Delete the checkpoint file
-      const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpointId}.json`);
+      const checkpointPath = path.join(this.shadowDir, 'checkpoints', `${checkpointId}.json");
       if (fs.existsSync(checkpointPath)) {
         fs.unlinkSync(checkpointPath);
         console.log("ShadowGit.deleteCheckpoint: Deleted checkpoint file ${checkpointPath}");
       } else {
-        console.warn(`ShadowGit.deleteCheckpoint: Checkpoint file ${checkpointPath} not found on disk`);
+        console.warn(`ShadowGit.deleteCheckpoint: Checkpoint file ${checkpointPath} not found on disk");
       }
       
       console.log("ShadowGit.deleteCheckpoint: Successfully deleted checkpoint ${checkpointId}");
